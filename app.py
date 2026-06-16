@@ -103,7 +103,7 @@ def bust():
     load.clear()
 
 def append(sheet: str, row: list):
-    _ws(sheet).append_row(row, value_input_option="USER_ENTERED")
+    _ws(sheet).append_row(row, value_input_option="RAW")
     bust()
 
 def set_cell(sheet: str, df_row_idx: int, col_name: str, df: pd.DataFrame, value):
