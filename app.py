@@ -96,7 +96,7 @@ def _ws(name: str):
 
 @st.cache_data(ttl=30)
 def load(sheet: str) -> pd.DataFrame:
-    records = _ws(sheet).get_all_records()
+    records = _ws(sheet).get_all_records(value_render_option="UNFORMATTED_VALUE")
     return pd.DataFrame(records) if records else pd.DataFrame()
 
 def bust():
