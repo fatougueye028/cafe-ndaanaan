@@ -1,0 +1,103 @@
+"""
+setup_sheets.py — Script d'initialisation du Google Sheet
+Exécute ce script UNE SEULE FOIS pour créer la structure de base.
+
+Usage :
+    python setup_sheets.py
+"""
+
+import gspread
+from google.oauth2.service_account import Credentials
+import json, sys
+
+# ── Charger les credentials ─────────────────────────────────────
+try:
+    with open(".streamlit/secrets.toml") as f:
+        import re
+        content = f.read()
+    # Extraction simple du JSON de compte de service
+    # Pour un vrai setup, utilise toml.load()
+    print("ℹ️  Assure-toi d'avoir configuré .streamlit/secrets.toml")
+except FileNotFoundError:
+    print("❌ Fichier .streamlit/secrets.toml introuvable.")
+    print("   Copie .streamlit/secrets.toml.example → .streamlit/secrets.toml et remplis les valeurs.")
+    sys.exit(1)
+
+# ── Connexion ───────────────────────────────────────────────────
+import toml
+secrets = toml.load(".streamlit/secrets.toml")
+
+scopes = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive",
+]
+creds = Credentials.from_service_account_info(secrets["gcp_service_account"], scopes=scopes)
+gc    = gspread.authorize(creds)
+
+SHEET_NAME = secrets["SHEET_NAME"]
+
+# ── Créer ou ouvrir le spreadsheet ─────────────────────────────
+try:
+    sh = gc.open(SHEET_NAME)
+    print(f"✅ Google Sheet '{SHEET_NAME}' existant trouvé.")
+except gspread.SpreadsheetNotFound:
+    sh = gc.create(SHEET_NAME)
+    sh.share(None, perm_type='anyone', role='writer')  # Partage optionnel
+    print(f"✅ Google Sheet '{SHEET_NAME}' créé.")
+
+# ── Définition des onglets et leurs en-têtes ───────────────────
+SHEETS = {
+    "Commandes": [
+        "Date", "ID", "Client", "Téléphone", "Adresse", "Zone",
+        "Gamme", "Format", "Quantité", "Prix_Unitaire", "CA", "Devise",
+        "Statut_Livraison", "Statut_Paiement", "Source", "Lot", "Commentaire",
+    ],
+    "Stock": [
+        "Gamme", "Format", "Localisation", "Stock_Dispo", "Derniere_MAJ",
+    ],
+    "Livreurs": [
+        "Livreur", "Date", "Zone", "Tarif", "Courses", "Montant",
+    ],
+}
+
+existing = [ws.title for ws in sh.worksheets()]
+
+for sheet_name, headers in SHEETS.items():
+    if sheet_name not in existing:
+        ws = sh.add_worksheet(title=sheet_name, rows=1000, cols=len(headers))
+        print(f"  ➕ Onglet '{sheet_name}' créé.")
+    else:
+        ws = sh.worksheet(sheet_name)
+        print(f"  ✔  Onglet '{sheet_name}' existant.")
+
+    # Écrire les en-têtes si la feuille est vide
+    if not ws.row_values(1):
+        ws.append_row(headers)
+        print(f"     ✅ En-têtes écrits.")
+
+# ── Pré-remplir le stock initial ───────────────────────────────
+ws_stock = sh.worksheet("Stock")
+if len(ws_stock.get_all_values()) <= 1:
+    GAMMES = ["Signature", "Original", "Prestige", "Épicé", "Ñooket"]
+    FORMATS = ["250g", "500g", "1kg"]
+    LOCALISATIONS = ["Touba", "Dakar", "France", "Canada"]
+    from datetime import date
+    today = date.today().strftime("%d/%m/%Y")
+    rows = []
+    for g in GAMMES:
+        for f in FORMATS:
+            for l in LOCALISATIONS:
+                rows.append([g, f, l, 0, today])
+    ws_stock.append_rows(rows)
+    print(f"  ✅ {len(rows)} lignes stock initialisées à 0.")
+
+# ── Supprimer la feuille par défaut ────────────────────────────
+try:
+    default_ws = sh.worksheet("Feuille 1")
+    sh.del_worksheet(default_ws)
+    print("  🗑  Feuille par défaut supprimée.")
+except:
+    pass
+
+print("\n🎉 Google Sheet prêt ! URL :")
+print(f"   https://docs.google.com/spreadsheets/d/{sh.id}/edit")
