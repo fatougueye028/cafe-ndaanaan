@@ -564,6 +564,7 @@ def page_production():
 
         COLS_DISPLAY = ["Lot", "Gamme", "Date", "Cafe_Brut_kg", "Cafe_Net_kg",
                         "Cout_Total", "Cout_Revient_kg", "Notes"]
+        # Vue résumée
         cols_ok = [c for c in COLS_DISPLAY if c in df_prod.columns]
         st.dataframe(
             df_prod[cols_ok],
@@ -576,6 +577,48 @@ def page_production():
                 "Cafe_Net_kg":      st.column_config.NumberColumn("Café net (kg)", format="%.1f"),
             }
         )
+
+        # Vue détaillée
+        with st.expander("📊 Voir le détail complet des charges"):
+            DETAIL_COLS = {
+                "Lot":              "Lot",
+                "Gamme":            "Gamme",
+                "Date":             "Date",
+                "Cafe_Brut_kg":     "Café brut (kg)",
+                "Prix_Cafe_Brut":   "Prix café brut (FCFA/kg)",
+                "Cout_Cafe_Brut":   "Coût achat café brut",
+                "Jar_kg":           "Baies de Selim (kg)",
+                "Prix_Jar":         "Prix Jar (FCFA/kg)",
+                "Cout_Jar":         "Coût achat Jar",
+                "Clous_FCFA":       "Clous de girofle",
+                "Poivre_FCFA":      "Poivre",
+                "Gingembre_FCFA":   "Gingembre",
+                "Frais_Torrefaction": "Torréfaction & moulage",
+                "Frais_Transport":  "Transport",
+                "Sachets_FCFA":     "Sachets / contenants",
+                "Main_Oeuvre":      "Main d'œuvre",
+                "Affiches_FCFA":    "Affiches & impression",
+                "Emballage_FCFA":   "Emballage gros commandes",
+                "Marketing_FCFA":   "Coût marketing",
+                "Cafe_Net_kg":      "Café net vendable (kg)",
+                "Cout_Total":       "COÛT TOTAL (FCFA)",
+                "Cout_Revient_kg":  "Coût de revient/kg",
+                "Notes":            "Notes",
+            }
+            cols_detail = [c for c in DETAIL_COLS.keys() if c in df_prod.columns]
+            df_detail = df_prod[cols_detail].rename(columns=DETAIL_COLS)
+
+            # Mettre en forme les colonnes numériques
+            num_cols = [v for k, v in DETAIL_COLS.items()
+                        if k not in ("Lot","Gamme","Date","Notes") and v in df_detail.columns]
+
+            col_cfg_detail = {c: st.column_config.NumberColumn(c, format="%.0f") for c in num_cols}
+            col_cfg_detail["Café brut (kg)"]       = st.column_config.NumberColumn("Café brut (kg)", format="%.1f")
+            col_cfg_detail["Baies de Selim (kg)"]  = st.column_config.NumberColumn("Baies de Selim (kg)", format="%.1f")
+            col_cfg_detail["Café net vendable (kg)"] = st.column_config.NumberColumn("Café net vendable (kg)", format="%.1f")
+            col_cfg_detail["Coût de revient/kg"]   = st.column_config.NumberColumn("Coût de revient/kg", format="%.0f")
+
+            st.dataframe(df_detail, use_container_width=True, hide_index=True, column_config=col_cfg_detail)
 
         # Graph coût de revient par gamme
         if "Cout_Revient_kg" in df_prod.columns and df_prod["Cout_Revient_kg"].sum() > 0:
