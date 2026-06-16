@@ -58,6 +58,16 @@ SHEETS = {
     "Livreurs": [
         "Livreur", "Date", "Zone", "Tarif", "Courses", "Montant",
     ],
+    "Production": [
+        "Lot", "Gamme", "Date",
+        "Cafe_Brut_kg", "Prix_Cafe_Brut", "Cout_Cafe_Brut",
+        "Jar_kg", "Prix_Jar", "Cout_Jar",
+        "Clous_FCFA", "Poivre_FCFA", "Gingembre_FCFA",
+        "Frais_Torrefaction", "Frais_Transport", "Sachets_FCFA",
+        "Main_Oeuvre", "Affiches_FCFA", "Emballage_FCFA", "Marketing_FCFA",
+        "Cafe_Net_kg", "Cout_Total", "Cout_Revient_kg",
+        "Qte_250g", "Qte_500g", "Qte_1kg", "Notes",
+    ],
 }
 
 existing = [ws.title for ws in sh.worksheets()]

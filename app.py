@@ -130,6 +130,7 @@ PAGES = {
     "➕ Nouvelle commande":  "new_order",
     "📋 Commandes":         "orders",
     "📦 Stock":             "stock",
+    "🏭 Production":        "production",
     "🚚 Livreurs":          "livreurs",
 }
 
@@ -547,6 +548,188 @@ def page_livreurs():
                 st.error("Le nom du livreur est obligatoire.")
 
 # ─── Main ──────────────────────────────────────────────────────
+# ─── Page : Production ─────────────────────────────────────────
+def page_production():
+    st.title("🏭 Production")
+
+    df_prod = load("Production")
+
+    # ── Historique des lots ──
+    if not df_prod.empty:
+        st.subheader("Historique des sous-lots")
+
+        for col in ["Cout_Total", "Cout_Revient_kg", "Cafe_Brut_kg", "Cafe_Net_kg"]:
+            if col in df_prod.columns:
+                df_prod[col] = pd.to_numeric(df_prod[col], errors="coerce").fillna(0)
+
+        COLS_DISPLAY = ["Lot", "Gamme", "Date", "Cafe_Brut_kg", "Cafe_Net_kg",
+                        "Cout_Total", "Cout_Revient_kg", "Notes"]
+        cols_ok = [c for c in COLS_DISPLAY if c in df_prod.columns]
+        st.dataframe(
+            df_prod[cols_ok],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Cout_Total":       st.column_config.NumberColumn("Coût total (FCFA)", format="%.0f"),
+                "Cout_Revient_kg":  st.column_config.NumberColumn("Coût/kg fini (FCFA)", format="%.0f"),
+                "Cafe_Brut_kg":     st.column_config.NumberColumn("Café brut (kg)", format="%.1f"),
+                "Cafe_Net_kg":      st.column_config.NumberColumn("Café net (kg)", format="%.1f"),
+            }
+        )
+
+        # Graph coût de revient par gamme
+        if "Cout_Revient_kg" in df_prod.columns and df_prod["Cout_Revient_kg"].sum() > 0:
+            fig = px.bar(
+                df_prod[df_prod["Cout_Revient_kg"] > 0],
+                x="Gamme", y="Cout_Revient_kg", color="Lot",
+                title="Coût de revient au kg par gamme (FCFA)",
+                barmode="group",
+            )
+            fig.update_layout(height=300, margin=dict(t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ── Nouveau sous-lot ──
+    st.markdown("---")
+    st.subheader("➕ Nouveau sous-lot de production")
+
+    with st.form("form_prod", clear_on_submit=True):
+
+        # Identification
+        st.markdown("**Identification**")
+        id1, id2, id3 = st.columns(3)
+        with id1:
+            lot_num = st.text_input("Numéro de lot *", placeholder="Lot 4")
+        with id2:
+            gamme_p = st.selectbox("Gamme *", GAMMES)
+        with id3:
+            date_p  = st.date_input("Date de lancement", value=date.today())
+
+        st.markdown("**Matières premières**")
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            cafe_brut_kg   = st.number_input("Café brut alloué (kg)", min_value=0.0, value=0.0, step=0.5)
+        with m2:
+            prix_cafe_brut = st.number_input("Prix café brut (FCFA/kg)", min_value=0, value=2300, step=50)
+        with m3:
+            jar_kg         = st.number_input("Baies de Selim / Jar (kg)", min_value=0.0, value=0.0, step=0.1)
+        with m4:
+            prix_jar       = st.number_input("Prix Jar (FCFA/kg)", min_value=0, value=2000, step=100)
+
+        st.markdown("**Épices** (laisser à 0 si non utilisé)")
+        e1, e2, e3 = st.columns(3)
+        with e1:
+            clous_fcfa    = st.number_input("Clous de girofle (FCFA)", min_value=0, value=0, step=100)
+        with e2:
+            poivre_fcfa   = st.number_input("Poivre (FCFA)", min_value=0, value=0, step=100)
+        with e3:
+            gingembre_fcfa = st.number_input("Gingembre (FCFA)", min_value=0, value=0, step=100)
+
+        st.markdown("**Charges de fabrication**")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            frais_torref   = st.number_input("Torréfaction & moulage (FCFA)", min_value=0, value=0, step=500)
+        with c2:
+            frais_transport = st.number_input("Transport (FCFA)", min_value=0, value=0, step=500)
+        with c3:
+            sachets_fcfa   = st.number_input("Sachets / contenants (FCFA)", min_value=0, value=0, step=500)
+        with c4:
+            main_oeuvre    = st.number_input("Main d'œuvre (FCFA)", min_value=0, value=0, step=500)
+
+        c5, c6, c7 = st.columns(3)
+        with c5:
+            affiches_fcfa  = st.number_input("Affiches & impression (FCFA)", min_value=0, value=0, step=500)
+        with c6:
+            emballage_fcfa = st.number_input("Emballage gros commandes (FCFA)", min_value=0, value=0, step=500)
+        with c7:
+            marketing_fcfa = st.number_input("Coût marketing (FCFA)", min_value=0, value=0, step=500)
+
+        st.markdown("**Résultat de production**")
+        r1, r2 = st.columns(2)
+        with r1:
+            cafe_net_kg = st.number_input("Café net vendable obtenu (kg)", min_value=0.0, value=0.0, step=0.5)
+        with r2:
+            notes_p = st.text_input("Notes techniques", placeholder="Ex: café de meilleure qualité")
+
+        st.markdown("**Stock produit** (unités emballées)")
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            qte_250g = st.number_input("Sachets 250g", min_value=0, value=0)
+        with s2:
+            qte_500g = st.number_input("Sachets 500g", min_value=0, value=0)
+        with s3:
+            qte_1kg  = st.number_input("Sachets 1kg",  min_value=0, value=0)
+
+        # Calculs automatiques
+        cout_cafe_brut = cafe_brut_kg * prix_cafe_brut
+        cout_jar       = jar_kg * prix_jar
+        cout_total     = (cout_cafe_brut + cout_jar + clous_fcfa + poivre_fcfa +
+                          gingembre_fcfa + frais_torref + frais_transport +
+                          sachets_fcfa + main_oeuvre + affiches_fcfa +
+                          emballage_fcfa + marketing_fcfa)
+        cout_revient_kg = round(cout_total / cafe_net_kg, 2) if cafe_net_kg > 0 else 0
+
+        st.info(
+            f"💰 **Coût de production total : {cout_total:,.0f} FCFA** | "
+            f"Coût de revient au kg fini : **{cout_revient_kg:,.0f} FCFA/kg**"
+        )
+
+        submitted = st.form_submit_button("✅ Enregistrer ce sous-lot", use_container_width=True, type="primary")
+
+    if submitted:
+        if not lot_num.strip():
+            st.error("Le numéro de lot est obligatoire.")
+        elif cafe_brut_kg == 0:
+            st.error("Le café brut alloué doit être > 0.")
+        else:
+            append("Production", [
+                lot_num.strip(), gamme_p, date_p.strftime("%d/%m/%Y"),
+                cafe_brut_kg, prix_cafe_brut, round(cout_cafe_brut),
+                jar_kg, prix_jar, round(cout_jar),
+                clous_fcfa, poivre_fcfa, gingembre_fcfa,
+                frais_torref, frais_transport, sachets_fcfa,
+                main_oeuvre, affiches_fcfa, emballage_fcfa, marketing_fcfa,
+                cafe_net_kg, round(cout_total), cout_revient_kg,
+                qte_250g, qte_500g, qte_1kg, notes_p,
+            ])
+
+            # Incrémenter le stock
+            _increment_stock(gamme_p, "250g", qte_250g)
+            _increment_stock(gamme_p, "500g", qte_500g)
+            _increment_stock(gamme_p, "1kg",  qte_1kg)
+
+            st.success(f"✅ Sous-lot {lot_num} — {gamme_p} enregistré ! "
+                       f"Stock incrémenté : {qte_250g}×250g, {qte_500g}×500g, {qte_1kg}×1kg")
+            st.balloons()
+
+def _increment_stock(gamme: str, fmt: str, qty: int):
+    """Ajoute au stock quand un lot est produit."""
+    if qty <= 0:
+        return
+    try:
+        df_s = load("Stock")
+        if df_s.empty:
+            return
+        # Localisation = Touba (production)
+        mask = (
+            (df_s["Gamme"]         == gamme)
+            & (df_s["Format"]      == fmt)
+            & (df_s["Localisation"] == "Touba")
+        )
+        if not mask.any():
+            return
+        idx     = df_s.index[mask][0]
+        current = int(pd.to_numeric(df_s.loc[idx, "Stock_Dispo"], errors="coerce") or 0)
+        ws      = _ws("Stock")
+        col_s   = list(df_s.columns).index("Stock_Dispo") + 1
+        col_m   = list(df_s.columns).index("Derniere_MAJ") + 1
+        ws.update_cell(idx + 2, col_s, current + qty)
+        ws.update_cell(idx + 2, col_m, date.today().strftime("%d/%m/%Y"))
+        bust()
+    except Exception as e:
+        st.warning(f"⚠️ Stock non incrémenté pour {gamme} {fmt} : {e}")
+
+
+# ─── Main ──────────────────────────────────────────────────────
 def main():
     page = sidebar_nav()
 
@@ -558,6 +741,8 @@ def main():
         page_orders()
     elif page == "stock":
         page_stock()
+    elif page == "production":
+        page_production()
     elif page == "livreurs":
         page_livreurs()
 
