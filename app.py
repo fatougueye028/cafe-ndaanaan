@@ -559,7 +559,7 @@ def page_livreurs():
             with c1:
                 st.metric("Total courses", int(resume["Courses"].sum()))
             with c2:
-                st.metric("Total dû", f"{resume['Montant_Total'].sum():,.0f} FCFA")
+                st.metric("Total payé", f"{resume['Montant_Total'].sum():,.0f} FCFA")
 
             st.subheader("Résumé par livreur")
             st.dataframe(resume, use_container_width=True, hide_index=True,
