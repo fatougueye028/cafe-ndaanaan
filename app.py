@@ -501,7 +501,7 @@ def page_stock():
                          "Unites_Vendues", "Stock_Restant", "Derniere_MAJ"]
             COLS_SHOW = [c for c in COLS_SHOW if c in df_f.columns]
 
-            styled = df_f[COLS_SHOW].style.applymap(
+            styled = df_f[COLS_SHOW].style.map(
                 style_restant,
                 subset=[c for c in ["Stock_Restant"] if c in COLS_SHOW]
             )
@@ -617,7 +617,7 @@ def page_stock():
                 COLS_LOC = ["Gamme", "Format", "Unites_Produites",
                             "Unites_Vendues", "Stock_Restant"]
                 COLS_LOC = [c for c in COLS_LOC if c in df_loc.columns]
-                df_loc_s = df_loc[COLS_LOC].style.applymap(
+                df_loc_s = df_loc[COLS_LOC].style.map(
                     lambda v: "color:#c0392b;font-weight:bold" if v <= 0 else (
                         "color:#e67e22;font-weight:bold" if v <= 5 else "color:#27ae60"),
                     subset=["Stock_Restant"]
