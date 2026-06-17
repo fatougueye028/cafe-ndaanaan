@@ -540,26 +540,39 @@ def page_stock():
 def page_livreurs():
     st.title("🚚 Livreurs")
 
-    df = load("Livreurs")
+    tab1, tab2 = st.tabs(["🛵 Courses livreurs", "📋 Contacts transporteurs"])
 
-    if not df.empty:
-        df["Montant"] = pd.to_numeric(df["Montant"], errors="coerce").fillna(0)
-        df["Courses"] = pd.to_numeric(df["Courses"], errors="coerce").fillna(0)
+    # ── Tab 1 : Courses ──────────────────────────────────────────
+    with tab1:
+        df = load("Livreurs")
 
-        resume = (
-            df.groupby("Livreur")
-            .agg(Courses=("Courses", "sum"), Montant_Total=("Montant", "sum"))
-            .reset_index()
-        )
-        st.subheader("Résumé")
-        st.dataframe(resume, use_container_width=True, hide_index=True)
+        if not df.empty:
+            df["Montant"] = pd.to_numeric(df["Montant"], errors="coerce").fillna(0)
+            df["Courses"] = pd.to_numeric(df["Courses"], errors="coerce").fillna(0)
 
-        st.subheader("Historique des courses")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+            resume = (
+                df.groupby("Livreur")
+                .agg(Courses=("Courses", "sum"), Montant_Total=("Montant", "sum"))
+                .reset_index()
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                st.metric("Total courses", int(resume["Courses"].sum()))
+            with c2:
+                st.metric("Total dû", f"{resume['Montant_Total'].sum():,.0f} FCFA")
 
-    # ── Enregistrer une course ──
-    st.markdown("---")
-    st.subheader("➕ Nouvelle course")
+            st.subheader("Résumé par livreur")
+            st.dataframe(resume, use_container_width=True, hide_index=True,
+                column_config={"Montant_Total": st.column_config.NumberColumn("Montant Dû (FCFA)", format="%.0f")}
+            )
+
+            st.subheader("Historique des courses")
+            st.dataframe(df, use_container_width=True, hide_index=True,
+                column_config={"Montant": st.column_config.NumberColumn("Montant (FCFA)", format="%.0f")}
+            )
+
+        st.markdown("---")
+        st.subheader("➕ Nouvelle course")
 
     with st.form("form_liv", clear_on_submit=True):
         l1, l2 = st.columns(2)
@@ -580,10 +593,51 @@ def page_livreurs():
                     date.today().strftime("%d/%m/%Y"),
                     zone_l, tarif, nb, montant,
                 ])
+                bust()
                 st.success("✅ Course enregistrée !")
                 st.rerun()
             else:
                 st.error("Le nom du livreur est obligatoire.")
+
+    # ── Tab 2 : Contacts transporteurs ──────────────────────────
+    with tab2:
+        df_t = load("Transporteurs")
+
+        if not df_t.empty:
+            st.dataframe(df_t, use_container_width=True, hide_index=True,
+                column_config={
+                    "Nom":       st.column_config.TextColumn("Transporteur"),
+                    "Type":      st.column_config.TextColumn("Type"),
+                    "Zone":      st.column_config.TextColumn("Zone couverte"),
+                    "Tarif":     st.column_config.TextColumn("Tarif"),
+                    "Telephone": st.column_config.TextColumn("Téléphone"),
+                    "Delai":     st.column_config.TextColumn("Délai"),
+                    "Notes":     st.column_config.TextColumn("Notes"),
+                }
+            )
+
+        st.markdown("---")
+        st.subheader("➕ Ajouter un contact")
+        with st.form("form_trans", clear_on_submit=True):
+            t1, t2 = st.columns(2)
+            with t1:
+                nom_t  = st.text_input("Nom du transporteur *")
+                type_t = st.selectbox("Type", ["Livraison locale", "Export France", "Export Canada", "Autre"])
+                zone_t = st.text_input("Zone couverte")
+            with t2:
+                tarif_t = st.text_input("Tarif", placeholder="Ex: 2000 FCFA / 5€ par kg")
+                tel_t   = st.text_input("Téléphone")
+                delai_t = st.text_input("Délai", placeholder="Ex: 1 mois")
+            notes_t = st.text_input("Notes")
+
+            if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
+                if nom_t.strip():
+                    append("Transporteurs", [nom_t.strip(), type_t, zone_t, tarif_t, tel_t, delai_t, notes_t])
+                    bust()
+                    st.success("✅ Contact enregistré !")
+                    st.rerun()
+                else:
+                    st.error("Le nom est obligatoire.")
 
 # ─── Main ──────────────────────────────────────────────────────
 # ─── Page : Production ─────────────────────────────────────────

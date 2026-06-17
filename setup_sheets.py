@@ -60,6 +60,9 @@ SHEETS = {
     "Livreurs": [
         "Livreur", "Date", "Zone", "Tarif", "Courses", "Montant",
     ],
+    "Transporteurs": [
+        "Nom", "Type", "Zone", "Tarif", "Telephone", "Delai", "Notes",
+    ],
     "Sachets": [
         "Date", "Gamme", "Couleur", "Format",
         "Qte_Achetee", "Qte_Utilisee", "Stock_Restant", "Notes",
