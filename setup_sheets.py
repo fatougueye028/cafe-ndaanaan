@@ -61,7 +61,7 @@ SHEETS = {
         "Livreur", "Date", "Zone", "Tarif", "Courses", "Montant",
     ],
     "Sachets": [
-        "Date", "Couleur", "Format",
+        "Date", "Gamme", "Couleur", "Format",
         "Qte_Achetee", "Qte_Utilisee", "Stock_Restant", "Notes",
     ],
     "Affiches": [

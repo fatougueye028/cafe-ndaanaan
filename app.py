@@ -871,7 +871,7 @@ def page_sachets():
                 if c in df_s.columns:
                     df_s[c] = pd.to_numeric(df_s[c], errors="coerce").fillna(0).astype(int)
 
-            COLS_S = ["Date", "Couleur", "Format", "Qte_Achetee", "Qte_Utilisee", "Stock_Restant"]
+            COLS_S = ["Date", "Gamme", "Couleur", "Format", "Qte_Achetee", "Qte_Utilisee", "Stock_Restant"]
             COLS_S = [c for c in COLS_S if c in df_s.columns]
             rest_s = [c for c in ["Stock_Restant"] if c in COLS_S]
             styled_s = df_s[COLS_S].style.map(style_stock, subset=rest_s) if rest_s else df_s[COLS_S]
@@ -892,17 +892,18 @@ def page_sachets():
         st.markdown("---")
         st.subheader("➕ Nouvel achat de sachets")
         with st.form("form_sachet", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            with c1: coul_s = st.selectbox("Couleur", COULEURS)
-            with c2: fmt_s  = st.selectbox("Format",  FORMATS)
-            with c3: date_s = st.date_input("Date", value=date.today(), key="ds")
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: gam_s2 = st.selectbox("Gamme",   GAMMES,   key="gs2")
+            with c2: coul_s = st.selectbox("Couleur", COULEURS)
+            with c3: fmt_s  = st.selectbox("Format",  FORMATS)
+            with c4: date_s = st.date_input("Date", value=date.today(), key="ds")
             n1, n2, n3 = st.columns(3)
             with n1: qte_ach  = st.number_input("Qté achetée",   min_value=0, value=0)
             with n2: qte_util = st.number_input("Qté utilisée",  min_value=0, value=0)
             with n3: stock_r  = st.number_input("Stock restant", min_value=0, value=0)
             notes_s = st.text_input("Notes", key="ns")
             if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
-                append("Sachets", [date_s.strftime("%d/%m/%Y"), coul_s, fmt_s,
+                append("Sachets", [date_s.strftime("%d/%m/%Y"), gam_s2, coul_s, fmt_s,
                                    qte_ach, qte_util, stock_r, notes_s])
                 bust(); st.success("✅ Enregistré !"); st.rerun()
 

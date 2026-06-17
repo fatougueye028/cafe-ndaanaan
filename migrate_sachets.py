@@ -26,6 +26,13 @@ sh      = gc.open(secrets["SHEET_NAME"])
 
 FORMAT_MAP = {"1 kg": "1kg", "500 g": "500g", "250 g": "250g"}
 GAMME_MAP  = {"Epicé": "Épicé", "Epice": "Épicé", "Nooket": "Ñooket"}
+COULEUR_GAMME = {
+    "Blanc":    "Signature",
+    "Noir":     "Prestige",
+    "Doré":     "Original",
+    "Doré vif": "Ñooket",
+    "Argenté":  "Épicé",
+}
 
 def norm(val, mapping): return mapping.get(str(val).strip(), str(val).strip())
 def safe_int(v):
@@ -88,14 +95,15 @@ for r in range(28, 38):
     rest_s    = safe_int(restant) if restant is not None else qte_a
     util_s    = max(0, qte_a - rest_s)
 
+    gamme_s = COULEUR_GAMME.get(couleur_s, "")
     rows_sac.append([
-        fmt_date(date_v), couleur_s, fmt_s,
+        fmt_date(date_v), gamme_s, couleur_s, fmt_s,
         qte_a,   # Qte_Achetee
         util_s,  # Qte_Utilisee
         rest_s,  # Stock_Restant
         "",
     ])
-    print(f"  ✔  {couleur_s} {fmt_s} → Achetés:{qte_a} Utilisés:{util_s} Restants:{rest_s}")
+    print(f"  ✔  {gamme_s} / {couleur_s} {fmt_s} → Achetés:{qte_a} Utilisés:{util_s} Restants:{rest_s}")
 
 if rows_sac:
     ws_sac.append_rows(rows_sac, value_input_option="RAW")
