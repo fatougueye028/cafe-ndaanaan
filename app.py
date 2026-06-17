@@ -427,47 +427,29 @@ def _update_stock_row(df_s, idx, qty_delta_vend=0, qty_delta_prod=0, qty_delta_c
     if "Derniere_MAJ" in cols:
         ws_s.update_cell(idx + 2, cols.index("Derniere_MAJ") + 1, today_s)
 
-def _log_mouvement(gamme, fmt, loc, type_mv, qty, ref="", notes=""):
-    """Enregistre un mouvement de stock."""
-    try:
-        append("Mouvements", [
-            date.today().strftime("%d/%m/%Y"),
-            gamme, fmt, loc, type_mv, qty, ref, notes
-        ])
-    except Exception:
-        pass
-
 def _decrement_stock(row):
-    """Réduit le stock lors du passage d'une commande à 'Livrée'."""
+    """Incrémente Unites_Vendues quand une commande passe à Livrée."""
     try:
         df_s = load("Stock")
         if df_s.empty:
             return
-        zone = str(row.get("Zone", "Dakar"))
-        loc  = zone if zone in LOCALISATIONS else "Dakar"
-        mask = (
-            (df_s["Gamme"]          == row["Gamme"])
-            & (df_s["Format"]       == row["Format"])
-            & (df_s["Localisation"] == loc)
-        )
+        qty  = int(pd.to_numeric(row.get("Quantité", 0), errors="coerce") or 0)
+        mask = (df_s["Gamme"] == row["Gamme"]) & (df_s["Format"] == row["Format"])
         if not mask.any():
             return
-        idx = df_s.index[mask][0]
-        qty = int(pd.to_numeric(row.get("Quantité", 0), errors="coerce") or 0)
+        # Prendre la ligne avec le plus de stock restant
+        idx = df_s[mask].sort_values("Stock_Restant", ascending=False).index[0] \
+              if "Stock_Restant" in df_s.columns else df_s.index[mask][0]
         _update_stock_row(df_s, idx, qty_delta_vend=qty, qty_delta_cmd=qty)
-        _log_mouvement(row["Gamme"], row["Format"], loc, "Sortie (Livraison)",
-                       qty, ref=str(row.get("ID", "")))
         bust()
     except Exception as e:
-        st.warning(f"⚠️ Stock non décrémenté automatiquement : {e}")
+        st.warning(f"⚠️ Stock non décrémenté : {e}")
 
 # ─── Page : Stock ──────────────────────────────────────────────
 def page_stock():
     st.title("📦 Suivi des Stocks")
 
-    df_s   = load("Stock")
-    df_hist = load("Stock_Historique")
-    df_mv  = load("Mouvements")
+    df_s = load("Stock")
 
     NUM_COLS = ["Unites_Produites", "Unites_Commandees", "Unites_Vendues", "Stock_Restant"]
     if not df_s.empty:
@@ -475,189 +457,78 @@ def page_stock():
             if c in df_s.columns:
                 df_s[c] = pd.to_numeric(df_s[c], errors="coerce").fillna(0).astype(int)
 
-    tab1, tab2, tab3 = st.tabs(["📊 État actuel", "🔄 Mouvements", "🗺️ Par localisation"])
+    # ── Tableau principal ────────────────────────────────────────
+    if df_s.empty:
+        st.info("Aucun stock renseigné. Lance setup_sheets.py puis migrate_stock.py.")
+    else:
+        gam_f = st.multiselect("Filtrer par gamme", GAMMES, default=GAMMES)
+        df_f  = df_s[df_s["Gamme"].isin(gam_f)].copy()
 
-    # ── Tab 1 : État actuel ──────────────────────────────────────
-    with tab1:
-        if df_s.empty:
-            st.info("Aucun stock renseigné.")
-        else:
-            f1, f2 = st.columns(2)
-            with f1:
-                loc_f = st.multiselect("Localisation", LOCALISATIONS, default=LOCALISATIONS, key="loc_f")
-            with f2:
-                gam_f = st.multiselect("Gamme", GAMMES, default=GAMMES, key="gam_f")
+        COLS_SHOW = ["Date", "Lot", "Gamme", "Format",
+                     "Unites_Produites", "Unites_Commandees",
+                     "Unites_Vendues",   "Stock_Restant"]
+        COLS_SHOW = [c for c in COLS_SHOW if c in df_f.columns]
 
-            mask = df_s["Localisation"].isin(loc_f) & df_s["Gamme"].isin(gam_f)
-            df_f = df_s[mask].copy()
-
-            def style_restant(val):
-                if val <= 0:   return "background-color:#fde8e8;color:#c0392b;font-weight:bold"
-                if val <= 5:   return "background-color:#fff3cd;color:#e67e22;font-weight:bold"
+        def style_restant(val):
+            try:
+                v = int(val)
+                if v <= 0: return "background-color:#fde8e8;color:#c0392b;font-weight:bold"
+                if v <= 5: return "background-color:#fff3cd;color:#e67e22;font-weight:bold"
                 return "background-color:#eafaf1;color:#27ae60"
+            except:
+                return ""
 
-            COLS_SHOW = ["Gamme", "Format", "Localisation",
-                         "Unites_Produites", "Unites_Commandees",
-                         "Unites_Vendues", "Stock_Restant", "Derniere_MAJ"]
-            COLS_SHOW = [c for c in COLS_SHOW if c in df_f.columns]
+        rest_col = [c for c in ["Stock_Restant"] if c in COLS_SHOW]
+        styled = df_f[COLS_SHOW].style.map(style_restant, subset=rest_col) if rest_col \
+                 else df_f[COLS_SHOW]
 
-            styled = df_f[COLS_SHOW].style.map(
-                style_restant,
-                subset=[c for c in ["Stock_Restant"] if c in COLS_SHOW]
+        st.dataframe(styled, use_container_width=True, hide_index=True,
+            column_config={
+                "Unites_Produites":  st.column_config.NumberColumn("Unités Produites"),
+                "Unites_Commandees": st.column_config.NumberColumn("Unités Commandées"),
+                "Unites_Vendues":    st.column_config.NumberColumn("Unités Vendues"),
+                "Stock_Restant":     st.column_config.NumberColumn("Stock Restant"),
+            }
+        )
+
+        # Graphique
+        if "Stock_Restant" in df_f.columns and df_f["Stock_Restant"].sum() > 0:
+            fig = px.bar(
+                df_f.groupby(["Gamme", "Format"])["Stock_Restant"].sum().reset_index(),
+                x="Gamme", y="Stock_Restant", color="Format",
+                title="Stock restant par gamme", barmode="group",
+                color_discrete_sequence=px.colors.qualitative.Set2,
             )
-            st.dataframe(styled, use_container_width=True, hide_index=True,
-                column_config={
-                    "Unites_Produites":  st.column_config.NumberColumn("Produites"),
-                    "Unites_Commandees": st.column_config.NumberColumn("Commandées"),
-                    "Unites_Vendues":    st.column_config.NumberColumn("Vendues"),
-                    "Stock_Restant":     st.column_config.NumberColumn("Stock Restant"),
-                    "Derniere_MAJ":      st.column_config.TextColumn("Dernière MAJ"),
-                }
-            )
+            fig.update_layout(height=280, margin=dict(t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
 
-            if "Stock_Restant" in df_f.columns:
-                fig = px.bar(
-                    df_f.groupby(["Gamme", "Format"])["Stock_Restant"].sum().reset_index(),
-                    x="Gamme", y="Stock_Restant", color="Format",
-                    title="Stock restant par gamme", barmode="group",
-                )
-                fig.update_layout(height=280, margin=dict(t=40, b=0))
-                st.plotly_chart(fig, use_container_width=True)
+    # ── Ajout manuel d'une ligne ─────────────────────────────────
+    st.markdown("---")
+    st.subheader("➕ Ajouter / mettre à jour un stock")
 
-            # Historique par lot
-            if not df_hist.empty:
-                with st.expander("📋 Historique par lot"):
-                    for c in ["Unites_Produites","Unites_Commandees","Unites_Vendues","Stock_Restant"]:
-                        if c in df_hist.columns:
-                            df_hist[c] = pd.to_numeric(df_hist[c], errors="coerce").fillna(0).astype(int)
-                    st.dataframe(df_hist, use_container_width=True, hide_index=True)
+    with st.form("form_stock", clear_on_submit=True):
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: gam_s = st.selectbox("Gamme",  GAMMES,  key="sg")
+        with c2: fmt_s = st.selectbox("Format", FORMATS, key="sf")
+        with c3: lot_s = st.text_input("Lot", placeholder="Lot 4")
+        with c4: date_s = st.date_input("Date", value=date.today())
 
-        # Mise à jour manuelle
-        st.markdown("---")
-        st.subheader("✏️ Ajustement manuel")
-        with st.form("form_stock", clear_on_submit=True):
-            s1, s2, s3 = st.columns(3)
-            with s1: gam_s = st.selectbox("Gamme",        GAMMES,       key="sg")
-            with s2: fmt_s = st.selectbox("Format",       FORMATS,      key="sf")
-            with s3: loc_s = st.selectbox("Localisation", LOCALISATIONS, key="sl")
+        n1, n2, n3, n4 = st.columns(4)
+        with n1: prod_s = st.number_input("Unités Produites",   min_value=0, value=0)
+        with n2: cmd_s  = st.number_input("Unités Commandées",  min_value=0, value=0)
+        with n3: vend_s = st.number_input("Unités Vendues",     min_value=0, value=0)
+        with n4: rest_s = st.number_input("Stock Restant",      min_value=0, value=0)
 
-            t1, t2 = st.columns(2)
-            with t1:
-                type_mv = st.selectbox("Type de mouvement",
-                    ["Entrée (production)", "Sortie (ajustement)", "Correction manuelle"])
-            with t2:
-                qty_mv = st.number_input("Quantité", min_value=0, value=0)
-            notes_mv = st.text_input("Notes / raison")
+        comm_s = st.text_input("Commentaire")
 
-            if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
-                df_s_full = load("Stock")
-                m = ((df_s_full["Gamme"] == gam_s)
-                     & (df_s_full["Format"] == fmt_s)
-                     & (df_s_full["Localisation"] == loc_s))
-                if not df_s_full.empty and m.any():
-                    idx = df_s_full.index[m][0]
-                    if "Entrée" in type_mv:
-                        _update_stock_row(df_s_full, idx, qty_delta_prod=qty_mv)
-                    elif "Sortie" in type_mv:
-                        _update_stock_row(df_s_full, idx, qty_delta_vend=qty_mv)
-                    else:
-                        # Correction : écraser Stock_Restant directement
-                        ws_s = _ws("Stock")
-                        col_r = list(df_s_full.columns).index("Stock_Restant") + 1
-                        col_m = list(df_s_full.columns).index("Derniere_MAJ") + 1
-                        ws_s.update_cell(idx + 2, col_r, qty_mv)
-                        ws_s.update_cell(idx + 2, col_m, date.today().strftime("%d/%m/%Y"))
-                    _log_mouvement(gam_s, fmt_s, loc_s, type_mv, qty_mv, notes=notes_mv)
-                    bust()
-                    st.success("✅ Stock mis à jour !")
-                else:
-                    append("Stock", [gam_s, fmt_s, loc_s, 0, 0, 0, qty_mv,
-                                     date.today().strftime("%d/%m/%Y")])
-                    _log_mouvement(gam_s, fmt_s, loc_s, "Entrée (production)", qty_mv, notes=notes_mv)
-                    bust()
-                    st.success("✅ Nouvelle référence créée !")
-                st.rerun()
-
-    # ── Tab 2 : Mouvements ───────────────────────────────────────
-    with tab2:
-        st.subheader("🔄 Historique des mouvements")
-        if df_mv.empty:
-            st.info("Aucun mouvement enregistré.")
-        else:
-            f1, f2, f3 = st.columns(3)
-            with f1:
-                mv_loc = st.multiselect("Localisation", LOCALISATIONS, default=LOCALISATIONS, key="mv_loc")
-            with f2:
-                mv_gam = st.multiselect("Gamme", GAMMES, default=GAMMES, key="mv_gam")
-            with f3:
-                mv_type = st.multiselect("Type", df_mv["Type"].unique().tolist(),
-                                         default=df_mv["Type"].unique().tolist(), key="mv_type")
-
-            mask_mv = (df_mv["Localisation"].isin(mv_loc)
-                       & df_mv["Gamme"].isin(mv_gam)
-                       & df_mv["Type"].isin(mv_type))
-            df_mv_f = df_mv[mask_mv]
-
-            df_mv["Quantite"] = pd.to_numeric(df_mv["Quantite"], errors="coerce").fillna(0).astype(int)
-            st.dataframe(df_mv_f, use_container_width=True, hide_index=True)
-
-    # ── Tab 3 : Par localisation ─────────────────────────────────
-    with tab3:
-        st.subheader("🗺️ Stock par localisation")
-        if df_s.empty:
-            st.info("Aucun stock.")
-            return
-
-        for loc in LOCALISATIONS:
-            df_loc = df_s[df_s["Localisation"] == loc].copy()
-            if df_loc.empty:
-                continue
-            total = int(df_loc["Stock_Restant"].sum()) if "Stock_Restant" in df_loc.columns else 0
-            with st.expander(f"📍 {loc} — {total} unités en stock"):
-                COLS_LOC = ["Gamme", "Format", "Unites_Produites",
-                            "Unites_Vendues", "Stock_Restant"]
-                COLS_LOC = [c for c in COLS_LOC if c in df_loc.columns]
-                df_loc_s = df_loc[COLS_LOC].style.map(
-                    lambda v: "color:#c0392b;font-weight:bold" if v <= 0 else (
-                        "color:#e67e22;font-weight:bold" if v <= 5 else "color:#27ae60"),
-                    subset=["Stock_Restant"]
-                )
-                st.dataframe(df_loc_s, use_container_width=True, hide_index=True)
-
-        # Flux Touba → Dakar → France
-        st.markdown("---")
-        st.subheader("➕ Enregistrer un transfert de stock")
-        with st.form("form_transfert", clear_on_submit=True):
-            t1, t2, t3, t4 = st.columns(4)
-            with t1: t_gam   = st.selectbox("Gamme",  GAMMES,       key="tg")
-            with t2: t_fmt   = st.selectbox("Format", FORMATS,      key="tf")
-            with t3: t_de    = st.selectbox("De",     LOCALISATIONS, key="td")
-            with t4: t_vers  = st.selectbox("Vers",   LOCALISATIONS, key="tv")
-            t_qty  = st.number_input("Quantité transférée", min_value=1, value=1)
-            t_note = st.text_input("Notes")
-
-            if st.form_submit_button("🚚 Enregistrer le transfert", use_container_width=True, type="primary"):
-                if t_de == t_vers:
-                    st.error("Source et destination identiques.")
-                else:
-                    df_s_full = load("Stock")
-                    # Décrémenter source
-                    m_src = ((df_s_full["Gamme"] == t_gam)
-                             & (df_s_full["Format"] == t_fmt)
-                             & (df_s_full["Localisation"] == t_de))
-                    # Incrémenter destination
-                    m_dst = ((df_s_full["Gamme"] == t_gam)
-                             & (df_s_full["Format"] == t_fmt)
-                             & (df_s_full["Localisation"] == t_vers))
-                    if m_src.any():
-                        _update_stock_row(df_s_full, df_s_full.index[m_src][0], qty_delta_vend=t_qty)
-                    if m_dst.any():
-                        _update_stock_row(df_s_full, df_s_full.index[m_dst][0], qty_delta_prod=t_qty)
-                    _log_mouvement(t_gam, t_fmt, t_de,   f"Transfert → {t_vers}", t_qty, notes=t_note)
-                    _log_mouvement(t_gam, t_fmt, t_vers, f"Transfert ← {t_de}",   t_qty, notes=t_note)
-                    bust()
-                    st.success(f"✅ Transfert enregistré : {t_qty} × {t_gam} {t_fmt} de {t_de} → {t_vers}")
-                    st.rerun()
+        if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
+            append("Stock", [
+                date_s.strftime("%d/%m/%Y"), lot_s, gam_s, fmt_s,
+                prod_s, cmd_s, vend_s, rest_s, comm_s
+            ])
+            bust()
+            st.success("✅ Ligne stock enregistrée !")
+            st.rerun()
 
 # ─── Page : Livreurs ───────────────────────────────────────────
 def page_livreurs():

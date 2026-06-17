@@ -53,18 +53,9 @@ SHEETS = {
         "Statut_Livraison", "Statut_Paiement", "Source", "Lot", "Commentaire",
     ],
     "Stock": [
-        "Gamme", "Format", "Localisation",
-        "Unites_Produites", "Unites_Commandees", "Unites_Vendues", "Stock_Restant",
-        "Derniere_MAJ",
-    ],
-    "Stock_Historique": [
         "Date", "Lot", "Gamme", "Format",
         "Unites_Produites", "Unites_Commandees", "Unites_Vendues", "Stock_Restant",
         "Commentaire",
-    ],
-    "Mouvements": [
-        "Date", "Gamme", "Format", "Localisation",
-        "Type", "Quantite", "Reference", "Notes",
     ],
     "Livreurs": [
         "Livreur", "Date", "Zone", "Tarif", "Courses", "Montant",
