@@ -246,13 +246,15 @@ def page_dashboard():
                     f'<div class="alert-rouge">🔴 <b>{len(critique)} références en rupture de stock</b></div>',
                     unsafe_allow_html=True,
                 )
-                st.dataframe(critique[["Gamme", "Format", "Localisation", col_stock]], hide_index=True)
+                cols_alerte = [c for c in ["Lot","Gamme","Format",col_stock] if c in critique.columns]
+                st.dataframe(critique[cols_alerte], hide_index=True)
             if not faible.empty:
                 st.markdown(
                     f'<div class="alert-orange">🟠 <b>{len(faible)} références avec stock ≤ 5</b></div>',
                     unsafe_allow_html=True,
                 )
-                st.dataframe(faible[["Gamme", "Format", "Localisation", col_stock]], hide_index=True)
+                cols_alerte = [c for c in ["Lot","Gamme","Format",col_stock] if c in faible.columns]
+                st.dataframe(faible[cols_alerte], hide_index=True)
         if critique.empty and faible.empty:
             st.success("✅ Tous les stocks sont OK.")
     else:
@@ -320,17 +322,28 @@ def page_orders():
         st.info("Aucune commande enregistrée.")
         return
 
+    df["CA"]       = pd.to_numeric(df["CA"],       errors="coerce").fillna(0)
+    df["Quantité"] = pd.to_numeric(df["Quantité"], errors="coerce").fillna(0)
+
+    # ── KPIs rapides ──
+    k1, k2, k3, k4 = st.columns(4)
+    with k1: kpi(str(len(df)), "Total commandes")
+    with k2: kpi(f"{df[df['Devise']=='FCFA']['CA'].sum():,.0f}", "CA Sénégal (FCFA)")
+    with k3: kpi(f"{df[df['Devise']=='EUR']['CA'].sum():,.2f} €", "CA France")
+    with k4:
+        non_payes = df[df["Statut_Paiement"].isin(["Non payé","Partiel"])]["CA"].sum()
+        kpi(f"{non_payes:,.0f}", "Paiements en attente")
+
+    st.markdown("---")
+
     # ── Filtres ──
-    with st.expander("🔍 Filtres", expanded=True):
+    with st.expander("🔍 Filtres", expanded=False):
         f1, f2, f3, f4 = st.columns(4)
-        with f1:
-            fz = st.multiselect("Zone", ZONES, default=ZONES)
-        with f2:
-            fl = st.multiselect("Livraison", STATUTS_LIV, default=STATUTS_LIV)
-        with f3:
-            fp = st.multiselect("Paiement", STATUTS_PAY, default=STATUTS_PAY)
-        with f4:
-            fg = st.multiselect("Gamme", GAMMES, default=GAMMES)
+        with f1: fz = st.multiselect("Zone",      ZONES,       default=ZONES)
+        with f2: fl = st.multiselect("Livraison", STATUTS_LIV, default=STATUTS_LIV)
+        with f3: fp = st.multiselect("Paiement",  STATUTS_PAY, default=STATUTS_PAY)
+        with f4: fg = st.multiselect("Gamme",     GAMMES,      default=GAMMES)
+        recherche = st.text_input("🔎 Rechercher un client", placeholder="Nom du client…")
 
     mask = (
         df["Zone"].isin(fz)
@@ -339,14 +352,15 @@ def page_orders():
         & df["Gamme"].isin(fg)
     )
     df_f = df[mask].copy()
-    df_f["CA"] = pd.to_numeric(df_f["CA"], errors="coerce").fillna(0)
+    if recherche.strip():
+        df_f = df_f[df_f["Client"].str.contains(recherche.strip(), case=False, na=False)]
 
-    st.caption(f"{len(df_f)} commande(s) — CA filtré : "
-               f"{df_f[df_f['Devise']=='FCFA']['CA'].sum():,.0f} FCFA | "
-               f"{df_f[df_f['Devise']=='EUR']['CA'].sum():,.2f} €")
+    ca_fcfa = df_f[df_f["Devise"]=="FCFA"]["CA"].sum()
+    ca_eur  = df_f[df_f["Devise"]=="EUR"]["CA"].sum()
+    st.caption(f"**{len(df_f)} commande(s)** — {ca_fcfa:,.0f} FCFA | {ca_eur:,.2f} €")
 
     COLS = ["Date","ID","Client","Zone","Gamme","Format","Quantité","CA","Devise",
-            "Statut_Livraison","Statut_Paiement","Source"]
+            "Statut_Livraison","Statut_Paiement","Source","Lot"]
     COLS = [c for c in COLS if c in df_f.columns]
 
     st.dataframe(
