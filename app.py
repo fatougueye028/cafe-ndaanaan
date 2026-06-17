@@ -131,6 +131,7 @@ PAGES = {
     "📋 Commandes":         "orders",
     "📦 Stock":             "stock",
     "🏭 Production":        "production",
+    "🎨 Sachets & Affiches": "sachets",
     "🚚 Livreurs":          "livreurs",
 }
 
@@ -800,6 +801,137 @@ def _increment_stock(gamme: str, fmt: str, qty: int):
 
 
 # ─── Main ──────────────────────────────────────────────────────
+# ─── Page : Sachets & Affiches ─────────────────────────────────
+def page_sachets():
+    st.title("🎨 Sachets & Affiches")
+
+    COULEURS = ["Blanc", "Noir", "Doré", "Doré vif", "Argenté", "Autre"]
+    TYPES_AFFICHES = ["A4", "A5", "Flyer", "Sticker", "Autre"]
+
+    tab1, tab2 = st.tabs(["📦 Sachets (contenants)", "🖼️ Affiches & flyers"])
+
+    # ── Tab 1 : Sachets ──────────────────────────────────────────
+    with tab1:
+        df_s = load("Sachets")
+
+        if not df_s.empty:
+            for c in ["Qte_Achetee", "Qte_Utilisee", "Stock_Restant"]:
+                if c in df_s.columns:
+                    df_s[c] = pd.to_numeric(df_s[c], errors="coerce").fillna(0).astype(int)
+
+            def style_sachet(val):
+                try:
+                    v = int(val)
+                    if v <= 0:  return "background-color:#fde8e8;color:#c0392b;font-weight:bold"
+                    if v <= 20: return "background-color:#fff3cd;color:#e67e22;font-weight:bold"
+                    return "background-color:#eafaf1;color:#27ae60"
+                except: return ""
+
+            COLS = ["Date","Couleur","Format","Gamme","Qte_Achetee","Qte_Utilisee","Stock_Restant"]
+            COLS = [c for c in COLS if c in df_s.columns]
+            rest_col = [c for c in ["Stock_Restant"] if c in COLS]
+            styled = df_s[COLS].style.map(style_sachet, subset=rest_col) if rest_col else df_s[COLS]
+            st.dataframe(styled, use_container_width=True, hide_index=True,
+                column_config={
+                    "Qte_Achetee":   st.column_config.NumberColumn("Achetés"),
+                    "Qte_Utilisee":  st.column_config.NumberColumn("Utilisés"),
+                    "Stock_Restant": st.column_config.NumberColumn("Stock Restant"),
+                }
+            )
+
+            # Graph
+            if "Stock_Restant" in df_s.columns:
+                fig = px.bar(
+                    df_s.groupby(["Couleur", "Format"])["Stock_Restant"].sum().reset_index(),
+                    x="Couleur", y="Stock_Restant", color="Format",
+                    title="Stock sachets par couleur", barmode="group",
+                )
+                fig.update_layout(height=280, margin=dict(t=40, b=0))
+                st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("➕ Nouvel achat / mise à jour")
+        with st.form("form_sachet", clear_on_submit=True):
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: coul_s = st.selectbox("Couleur", COULEURS)
+            with c2: fmt_s  = st.selectbox("Format",  FORMATS)
+            with c3: gam_s  = st.selectbox("Gamme associée", [""] + GAMMES)
+            with c4: date_s = st.date_input("Date", value=date.today())
+
+            n1, n2, n3, n4 = st.columns(4)
+            with n1: qte_ach  = st.number_input("Qté achetée",   min_value=0, value=0)
+            with n2: qte_util = st.number_input("Qté utilisée",  min_value=0, value=0)
+            with n3: stock_r  = st.number_input("Stock restant", min_value=0, value=0)
+            with n4: prix_u   = st.number_input("Prix unitaire (FCFA)", min_value=0, value=0)
+
+            notes_s = st.text_input("Notes")
+
+            if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
+                append("Sachets", [
+                    date_s.strftime("%d/%m/%Y"), coul_s, fmt_s, gam_s,
+                    qte_ach, qte_util, stock_r, prix_u, notes_s
+                ])
+                bust()
+                st.success("✅ Enregistré !")
+                st.rerun()
+
+    # ── Tab 2 : Affiches ─────────────────────────────────────────
+    with tab2:
+        df_a = load("Affiches")
+
+        if not df_a.empty:
+            for c in ["Qte_Imprimee", "Qte_Distribuee", "Stock_Restant"]:
+                if c in df_a.columns:
+                    df_a[c] = pd.to_numeric(df_a[c], errors="coerce").fillna(0).astype(int)
+
+            def style_aff(val):
+                try:
+                    v = int(val)
+                    if v <= 0:  return "background-color:#fde8e8;color:#c0392b;font-weight:bold"
+                    if v <= 10: return "background-color:#fff3cd;color:#e67e22;font-weight:bold"
+                    return "background-color:#eafaf1;color:#27ae60"
+                except: return ""
+
+            COLS_A = ["Date","Type","Format_Affiche","Qte_Imprimee","Qte_Distribuee","Stock_Restant","Cout_FCFA"]
+            COLS_A = [c for c in COLS_A if c in df_a.columns]
+            rest_col_a = [c for c in ["Stock_Restant"] if c in COLS_A]
+            styled_a = df_a[COLS_A].style.map(style_aff, subset=rest_col_a) if rest_col_a else df_a[COLS_A]
+            st.dataframe(styled_a, use_container_width=True, hide_index=True,
+                column_config={
+                    "Qte_Imprimee":   st.column_config.NumberColumn("Imprimées"),
+                    "Qte_Distribuee": st.column_config.NumberColumn("Distribuées"),
+                    "Stock_Restant":  st.column_config.NumberColumn("Stock Restant"),
+                    "Cout_FCFA":      st.column_config.NumberColumn("Coût (FCFA)", format="%.0f"),
+                }
+            )
+
+        st.markdown("---")
+        st.subheader("➕ Nouvel achat d'affiches")
+        with st.form("form_affiche", clear_on_submit=True):
+            a1, a2, a3 = st.columns(3)
+            with a1: type_a  = st.selectbox("Type", TYPES_AFFICHES)
+            with a2: fmt_a   = st.text_input("Format / Description", placeholder="A4, A5, 10x15cm…")
+            with a3: date_a  = st.date_input("Date", value=date.today(), key="da")
+
+            b1, b2, b3, b4 = st.columns(4)
+            with b1: qte_imp  = st.number_input("Qté imprimée",   min_value=0, value=0)
+            with b2: qte_dist = st.number_input("Qté distribuée", min_value=0, value=0)
+            with b3: stock_a  = st.number_input("Stock restant",  min_value=0, value=0)
+            with b4: cout_a   = st.number_input("Coût (FCFA)",    min_value=0, value=0)
+
+            notes_a = st.text_input("Notes", key="na")
+
+            if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
+                append("Affiches", [
+                    date_a.strftime("%d/%m/%Y"), type_a, fmt_a,
+                    qte_imp, qte_dist, stock_a, cout_a, notes_a
+                ])
+                bust()
+                st.success("✅ Enregistré !")
+                st.rerun()
+
+
+# ─── Main ──────────────────────────────────────────────────────
 def main():
     page = sidebar_nav()
 
@@ -813,6 +945,8 @@ def main():
         page_stock()
     elif page == "production":
         page_production()
+    elif page == "sachets":
+        page_sachets()
     elif page == "livreurs":
         page_livreurs()
 

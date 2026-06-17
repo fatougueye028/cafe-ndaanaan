@@ -60,6 +60,14 @@ SHEETS = {
     "Livreurs": [
         "Livreur", "Date", "Zone", "Tarif", "Courses", "Montant",
     ],
+    "Sachets": [
+        "Date", "Couleur", "Format", "Gamme",
+        "Qte_Achetee", "Qte_Utilisee", "Stock_Restant", "Prix_Unitaire", "Notes",
+    ],
+    "Affiches": [
+        "Date", "Type", "Format_Affiche",
+        "Qte_Imprimee", "Qte_Distribuee", "Stock_Restant", "Cout_FCFA", "Notes",
+    ],
     "Production": [
         "Lot", "Gamme", "Date",
         "Cafe_Brut_kg", "Prix_Cafe_Brut", "Cout_Cafe_Brut",
@@ -87,21 +95,7 @@ for sheet_name, headers in SHEETS.items():
         ws.append_row(headers)
         print(f"     ✅ En-têtes écrits.")
 
-# ── Pré-remplir le stock initial ───────────────────────────────
-ws_stock = sh.worksheet("Stock")
-if len(ws_stock.get_all_values()) <= 1:
-    GAMMES = ["Signature", "Original", "Prestige", "Épicé", "Ñooket"]
-    FORMATS = ["250g", "500g", "1kg"]
-    LOCALISATIONS = ["Touba", "Dakar", "France", "Canada"]
-    from datetime import date
-    today = date.today().strftime("%d/%m/%Y")
-    rows = []
-    for g in GAMMES:
-        for f in FORMATS:
-            for l in LOCALISATIONS:
-                rows.append([g, f, l, 0, today])
-    ws_stock.append_rows(rows)
-    print(f"  ✅ {len(rows)} lignes stock initialisées à 0.")
+print("\nℹ️  Stock : lance migrate_stock.py pour importer l'historique depuis l'Excel.")
 
 # ── Supprimer la feuille par défaut ────────────────────────────
 try:
