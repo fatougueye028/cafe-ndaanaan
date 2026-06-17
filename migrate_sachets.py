@@ -1,6 +1,9 @@
 """
-migrate_sachets.py — Import du stock de sachets depuis Excel
-Lit les deux tableaux de l'onglet "4. SUIVI STOCKS" (lignes 27-37).
+migrate_sachets.py — Import des stocks Sachets et Affiches depuis Excel
+
+2 tableaux dans "4. SUIVI STOCKS" (lignes 27-37) :
+  - Gauche (cols 1-4)  : Stock Affiches → Date | Gamme  | Format | Unité
+  - Droite (cols 6-9+) : Stock Sachets  → Date | Couleur | Format | Unité (+ col 11 = restants)
 
 Usage :
     source venv/bin/activate
@@ -20,18 +23,9 @@ scopes  = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/
 creds   = Credentials.from_service_account_info(secrets["gcp_service_account"], scopes=scopes)
 gc      = gspread.authorize(creds)
 sh      = gc.open(secrets["SHEET_NAME"])
-ws_s    = sh.worksheet("Sachets")
 
 FORMAT_MAP = {"1 kg": "1kg", "500 g": "500g", "250 g": "250g"}
-GAMME_MAP  = {"Epicé": "Épicé", "Epice": "Épicé"}
-# Mapping couleur → gamme
-COULEUR_GAMME = {
-    "Blanc":    "Signature",
-    "Noir":     "Original",
-    "Doré":     "Prestige",
-    "Doré vif": "Épicé",
-    "Argenté":  "Ñooket",
-}
+GAMME_MAP  = {"Epicé": "Épicé", "Epice": "Épicé", "Nooket": "Ñooket"}
 
 def norm(val, mapping): return mapping.get(str(val).strip(), str(val).strip())
 def safe_int(v):
@@ -44,16 +38,14 @@ def fmt_date(v):
 wb    = openpyxl.load_workbook(EXCEL_PATH, data_only=True)
 ws_xl = wb["4. SUIVI STOCKS"]
 
-rows = []
+# ── STOCK AFFICHES (tableau gauche : cols 1-4) ─────────────────
+print("=== Import Stock Affiches (par gamme) ===")
+ws_aff = sh.worksheet("Affiches")
+rows_aff = []
 
-# ── Tableau gauche : par gamme (cols 1-4) ──────────────────────
-print("=== Sachets par gamme ===")
 for r in range(28, 38):
     date_v = ws_xl.cell(r, 1).value
     gamme  = ws_xl.cell(r, 2).value
-    fmt    = ws_xl.cell(r, 4).value  # col 4 = Unité (quantité)
-    qte    = ws_xl.cell(r, 4).value
-    # Corriger : col 3 = Format, col 4 = Unité (stock actuel)
     fmt    = ws_xl.cell(r, 3).value
     qte    = ws_xl.cell(r, 4).value
 
@@ -63,53 +55,51 @@ for r in range(28, 38):
     fmt_s   = norm(fmt, FORMAT_MAP)
     stock   = safe_int(qte)
 
-    # Déterminer la couleur selon la gamme
-    couleur = {v: k for k, v in COULEUR_GAMME.items()}.get(gamme_s, "")
-
-    row = [
-        fmt_date(date_v), couleur, fmt_s, gamme_s,
-        stock,  # Qte_Achetee (on utilise le stock connu comme référence)
-        0,      # Qte_Utilisee (inconnu)
+    rows_aff.append([
+        fmt_date(date_v), gamme_s, fmt_s,
+        stock,  # Qte_Imprimee
+        0,      # Qte_Utilisee
         stock,  # Stock_Restant
-        0,      # Prix_Unitaire (inconnu)
-        "Importé depuis Excel — tableau par gamme",
-    ]
-    rows.append(row)
-    print(f"  ✔  {gamme_s} {fmt_s} ({couleur}) → Stock: {stock}")
+        "",
+    ])
+    print(f"  ✔  {gamme_s} {fmt_s} → Stock: {stock}")
 
-# ── Tableau droite : par couleur (cols 6-9+) ───────────────────
-print("\n=== Sachets par couleur ===")
+if rows_aff:
+    ws_aff.append_rows(rows_aff, value_input_option="RAW")
+    print(f"  ✅ {len(rows_aff)} affiches importées.")
+
+# ── STOCK SACHETS (tableau droite : cols 6-9, restants col 11) ─
+print("\n=== Import Stock Sachets (par couleur) ===")
+ws_sac = sh.worksheet("Sachets")
+rows_sac = []
+
 for r in range(28, 38):
     date_v  = ws_xl.cell(r, 6).value
     couleur = ws_xl.cell(r, 7).value
     fmt     = ws_xl.cell(r, 8).value
     qte_ach = ws_xl.cell(r, 9).value
-    restant = ws_xl.cell(r, 11).value  # col 11 = restants
+    restant = ws_xl.cell(r, 11).value
 
     if not couleur: continue
 
     couleur_s = str(couleur).strip()
     fmt_s     = norm(fmt, FORMAT_MAP)
-    gamme_s   = COULEUR_GAMME.get(couleur_s, "")
     qte_a     = safe_int(qte_ach)
-    rest_s    = safe_int(restant)
+    rest_s    = safe_int(restant) if restant is not None else qte_a
+    util_s    = max(0, qte_a - rest_s)
 
-    row = [
-        fmt_date(date_v), couleur_s, fmt_s, gamme_s,
-        qte_a,              # Qte_Achetee
-        max(0, qte_a - rest_s),  # Qte_Utilisee
-        rest_s,             # Stock_Restant
-        0,                  # Prix_Unitaire
-        "Importé depuis Excel — tableau par couleur",
-    ]
-    rows.append(row)
-    print(f"  ✔  {couleur_s} {fmt_s} ({gamme_s}) → Achetés:{qte_a} Restants:{rest_s}")
+    rows_sac.append([
+        fmt_date(date_v), couleur_s, fmt_s,
+        qte_a,   # Qte_Achetee
+        util_s,  # Qte_Utilisee
+        rest_s,  # Stock_Restant
+        "",
+    ])
+    print(f"  ✔  {couleur_s} {fmt_s} → Achetés:{qte_a} Utilisés:{util_s} Restants:{rest_s}")
 
-# ── Import en une requête ───────────────────────────────────────
-if rows:
-    ws_s.append_rows(rows, value_input_option="RAW")
-    print(f"\n🎉 {len(rows)} ligne(s) sachets importées !")
-else:
-    print("\nℹ️  Rien à importer.")
+if rows_sac:
+    ws_sac.append_rows(rows_sac, value_input_option="RAW")
+    print(f"  ✅ {len(rows_sac)} sachets importés.")
 
-print(f"\n📊 https://docs.google.com/spreadsheets/d/{sh.id}/edit")
+print(f"\n🎉 Import terminé !")
+print(f"📊 https://docs.google.com/spreadsheets/d/{sh.id}/edit")
