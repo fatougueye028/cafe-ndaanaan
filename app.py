@@ -563,12 +563,12 @@ def page_livreurs():
 
             st.subheader("Résumé par livreur")
             st.dataframe(resume, use_container_width=True, hide_index=True,
-                column_config={"Montant_Total": st.column_config.NumberColumn("Montant Dû (FCFA)", format="%.0f")}
+                column_config={"Montant_Total": st.column_config.NumberColumn("Montant Payé (FCFA)", format="%.0f")}
             )
 
             st.subheader("Historique des courses")
             st.dataframe(df, use_container_width=True, hide_index=True,
-                column_config={"Montant": st.column_config.NumberColumn("Montant (FCFA)", format="%.0f")}
+                column_config={"Montant": st.column_config.NumberColumn("Montant Payé (FCFA)", format="%.0f")}
             )
 
         st.markdown("---")
