@@ -94,7 +94,7 @@ def _gs_client():
 def _ws(name: str):
     return _gs_client().open(st.secrets["SHEET_NAME"]).worksheet(name)
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=10)
 def load(sheet: str) -> pd.DataFrame:
     records = _ws(sheet).get_all_records(value_render_option="UNFORMATTED_VALUE")
     return pd.DataFrame(records) if records else pd.DataFrame()
@@ -142,7 +142,12 @@ def sidebar_nav() -> str:
         unsafe_allow_html=True,
     )
     st.sidebar.markdown("---")
-    return PAGES[st.sidebar.radio("", list(PAGES.keys()), label_visibility="collapsed")]
+    choice = PAGES[st.sidebar.radio("", list(PAGES.keys()), label_visibility="collapsed")]
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Rafraîchir les données", use_container_width=True):
+        bust()
+        st.rerun()
+    return choice
 
 # ─── Helpers d'affichage ───────────────────────────────────────
 def kpi(val: str, label: str):
