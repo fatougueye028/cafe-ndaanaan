@@ -246,17 +246,13 @@ def page_dashboard():
                     f'<div class="alert-rouge">🔴 <b>{len(critique)} références en rupture de stock</b></div>',
                     unsafe_allow_html=True,
                 )
-                cols_alerte = [c for c in ["Lot","Gamme","Format",col_stock] if c in critique.columns]
-                st.dataframe(critique[cols_alerte], hide_index=True)
             if not faible.empty:
                 st.markdown(
                     f'<div class="alert-orange">🟠 <b>{len(faible)} références avec stock ≤ 5</b></div>',
                     unsafe_allow_html=True,
                 )
-                cols_alerte = [c for c in ["Lot","Gamme","Format",col_stock] if c in faible.columns]
-                st.dataframe(faible[cols_alerte], hide_index=True)
-        if critique.empty and faible.empty:
-            st.success("✅ Tous les stocks sont OK.")
+            if critique.empty and faible.empty:
+                st.success("✅ Tous les stocks sont OK.")
     else:
         st.info("Aucun stock renseigné.")
 
