@@ -172,15 +172,18 @@ def page_dashboard():
 
     ca_fcfa   = df[df["Devise"] == "FCFA"]["CA"].sum()
     ca_eur    = df[df["Devise"] == "EUR"]["CA"].sum()
-    en_attente = df[df["Statut_Livraison"].isin(["À préparer", "Préparée"])]
-    non_payes  = df[df["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
+    # Compter par ID unique (1 commande = 1 client + 1 date, même si plusieurs produits)
+    nb_total    = df["ID"].nunique()
+    nb_attente  = df[df["Statut_Livraison"].isin(["À préparer", "Préparée"])]["ID"].nunique()
+    nb_livrees  = df[df["Statut_Livraison"] == "Livrée"]["ID"].nunique()
+    non_payes   = df[df["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1: kpi(f"{ca_fcfa:,.0f}", "CA FCFA total")
     with c2: kpi(f"{ca_eur:,.2f} €", "CA France total")
-    with c3: kpi(str(len(en_attente)), "Commandes en attente")
+    with c3: kpi(str(nb_attente), "Commandes en attente")
     with c4: kpi(f"{non_payes.sum():,.0f}", "Paiements à recevoir (FCFA)")
-    with c5: kpi(str(len(df[df["Statut_Livraison"] == "Livrée"])), "Commandes livrées")
+    with c5: kpi(str(nb_livrees), "Commandes livrées")
 
     st.markdown("---")
 
@@ -330,7 +333,7 @@ def page_orders():
 
     # ── KPIs rapides ──
     k1, k2, k3, k4 = st.columns(4)
-    with k1: kpi(str(len(df)), "Total commandes")
+    with k1: kpi(str(df["ID"].nunique()), "Total commandes")
     with k2: kpi(f"{df[df['Devise']=='FCFA']['CA'].sum():,.0f}", "CA Sénégal (FCFA)")
     with k3: kpi(f"{df[df['Devise']=='EUR']['CA'].sum():,.2f} €", "CA France")
     with k4:
@@ -360,7 +363,7 @@ def page_orders():
 
     ca_fcfa = df_f[df_f["Devise"]=="FCFA"]["CA"].sum()
     ca_eur  = df_f[df_f["Devise"]=="EUR"]["CA"].sum()
-    st.caption(f"**{len(df_f)} commande(s)** — {ca_fcfa:,.0f} FCFA | {ca_eur:,.2f} €")
+    st.caption(f"**{df_f['ID'].nunique()} commande(s)** — {ca_fcfa:,.0f} FCFA | {ca_eur:,.2f} €")
 
     COLS = ["Date","ID","Client","Zone","Gamme","Format","Quantité","CA","Devise",
             "Statut_Livraison","Statut_Paiement","Source","Lot"]
