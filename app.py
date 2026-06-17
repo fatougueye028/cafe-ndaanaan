@@ -237,22 +237,29 @@ def page_dashboard():
     st.subheader("📦 Alertes Stock")
     if not df_stock.empty:
         col_stock = "Stock_Restant" if "Stock_Restant" in df_stock.columns else "Stock_Dispo" if "Stock_Dispo" in df_stock.columns else None
-        if col_stock:
+        if col_stock and "Lot" in df_stock.columns:
             df_stock[col_stock] = pd.to_numeric(df_stock[col_stock], errors="coerce").fillna(0)
-            critique = df_stock[df_stock[col_stock] == 0]
-            faible   = df_stock[(df_stock[col_stock] > 0) & (df_stock[col_stock] <= 5)]
-            if not critique.empty:
-                st.markdown(
-                    f'<div class="alert-rouge">🔴 <b>{len(critique)} références en rupture de stock</b></div>',
-                    unsafe_allow_html=True,
-                )
-            if not faible.empty:
-                st.markdown(
-                    f'<div class="alert-orange">🟠 <b>{len(faible)} références avec stock ≤ 5</b></div>',
-                    unsafe_allow_html=True,
-                )
-            if critique.empty and faible.empty:
-                st.success("✅ Tous les stocks sont OK.")
+            # Garder uniquement le dernier lot
+            dernier_lot = df_stock["Lot"].dropna().astype(str).unique().tolist()
+            # Trier par numéro de lot (extraire le chiffre)
+            def lot_num(l):
+                import re
+                m = re.search(r'\d+', str(l))
+                return int(m.group()) if m else 0
+            dernier_lot = max(dernier_lot, key=lot_num) if dernier_lot else None
+
+            if dernier_lot:
+                df_dernier = df_stock[df_stock["Lot"].astype(str) == dernier_lot]
+                faible = df_dernier[df_dernier[col_stock] <= 5]
+                if not faible.empty:
+                    st.markdown(
+                        f'<div class="alert-orange">🟠 <b>{len(faible)} références ≤ 5 unités ({dernier_lot})</b></div>',
+                        unsafe_allow_html=True,
+                    )
+                    cols_alerte = [c for c in ["Lot","Gamme","Format",col_stock] if c in faible.columns]
+                    st.dataframe(faible[cols_alerte], hide_index=True)
+                else:
+                    st.success(f"✅ Stock OK sur le {dernier_lot}.")
     else:
         st.info("Aucun stock renseigné.")
 
