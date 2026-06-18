@@ -413,7 +413,12 @@ def page_orders():
     col_liv = "Statut_Livraison" if "Statut_Livraison" in df.columns else statut_col
     nb_total   = df["ID"].nunique()
     nb_livrees = df[df[col_liv] == "Livrée"]["ID"].nunique()
-    nb_a_prep  = df[df[col_liv].isin(["À préparer", "Préparée"])]["ID"].nunique()
+    # À préparer : uniquement commandes confirmées (pas prospects/précommandes)
+    mask_prep = (
+        df[col_liv].isin(["À préparer", "Préparée"])
+        & df[statut_col].isin(["Commande confirmée", "À préparer", "Préparée"])
+    )
+    nb_a_prep  = df[mask_prep]["ID"].nunique()
 
     k1, k2, k3, k4 = st.columns(4)
     with k1: kpi(str(nb_total),   "Total commandes")
