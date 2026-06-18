@@ -203,6 +203,7 @@ def page_dashboard():
     statut_col = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
 
     # CA réel = uniquement commandes confirmées/préparées/livrées
+    # Les lignes offertes restent dans le CA (comptées comme coût marketing)
     df_reel = df[df[statut_col].isin(TYPES_CA_REEL + ["Livrée", "Préparée"])]
     ca_fcfa  = df_reel[df_reel["Devise"] == "FCFA"]["CA"].sum()
     ca_eur   = df_reel[df_reel["Devise"] == "EUR"]["CA"].sum()
@@ -215,12 +216,11 @@ def page_dashboard():
     nb_livrees = df[df[statut_col] == "Livrée"]["ID"].nunique()
     non_payes  = df_reel[df_reel["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4 = st.columns(4)
     with c1: kpi(f"{ca_fcfa:,.0f}", "CA réel FCFA")
-    with c2: kpi(f"{ca_eur:,.2f} €", "CA réel France")
-    with c3: kpi(str(nb_attente), "À préparer / livrer")
-    with c4: kpi(f"{non_payes.sum():,.0f}", "Paiements en attente")
-    with c5: kpi(f"{ca_prev:,.0f}", "Pipeline prévisionnel")
+    with c2: kpi(str(nb_attente), "À préparer / livrer")
+    with c3: kpi(f"{non_payes.sum():,.0f}", "Paiements en attente")
+    with c4: kpi(f"{ca_prev:,.0f}", "Pipeline prévisionnel")
 
     # Alerte prospects/précommandes
     if not df_prev.empty:
@@ -357,7 +357,11 @@ def page_new_order():
         else:
             st.warning(f"📋 **Prévisionnel : {ca:,.2f} {devise}** — n'entre pas dans le CA tant que non confirmé")
 
-        lot_prevu = st.text_input("Lot prévu", placeholder="Lot 4, Lot Magal, À définir")
+        l1, l2 = st.columns(2)
+        with l1:
+            lot_prevu = st.text_input("Lot prévu", placeholder="Lot 4, Lot Magal, À définir")
+        with l2:
+            offert = st.checkbox("🎁 Offre commerciale")
 
         submitted = st.form_submit_button("✅ Enregistrer", use_container_width=True, type="primary")
 
@@ -366,12 +370,16 @@ def page_new_order():
             st.error("Le nom du client est obligatoire.")
         else:
             new_id = next_id(df_cmd, type_dem)
+            # Statut_Livraison déduit du Type_Demande
+            statut_liv = {"Livrée": "Livrée", "Préparée": "Préparée",
+                          "Annulée": "Annulée"}.get(type_dem, "À préparer")
             append("Commandes", [
                 date.today().strftime("%d/%m/%Y"),
                 new_id, client.strip(), tel, adresse, zone,
                 gamme, fmt, qty, prix, ca, devise,
-                type_dem, "Non payé",
+                type_dem, statut_liv, "Non payé",
                 source, lot_prevu, comm, date_prevue,
+                "Offre commerciale" if offert else "",
             ])
             st.success(f"✅ {type_dem} **{new_id}** enregistrée !")
             if est_reel:
@@ -395,7 +403,7 @@ def page_orders():
     df_reel = df[df[statut_col].isin(TYPES_CA_REEL + ["Livrée", "Préparée", "À préparer"])]
     with k1: kpi(str(df["ID"].nunique()), "Total (toutes demandes)")
     with k2: kpi(f"{df_reel[df_reel['Devise']=='FCFA']['CA'].sum():,.0f}", "CA réel FCFA")
-    with k3: kpi(f"{df_reel[df_reel['Devise']=='EUR']['CA'].sum():,.2f} €", "CA réel France")
+    with k3: kpi(str(df_reel["ID"].nunique()), "Commandes confirmées")
     with k4:
         non_payes = df_reel[df_reel["Statut_Paiement"].isin(["Non payé","Partiel"])]["CA"].sum()
         kpi(f"{non_payes:,.0f}", "Paiements en attente")
@@ -425,8 +433,7 @@ def page_orders():
         df_f = df_f[df_f["Client"].str.contains(recherche.strip(), case=False, na=False)]
 
     ca_fcfa = df_f[df_f["Devise"]=="FCFA"]["CA"].sum()
-    ca_eur  = df_f[df_f["Devise"]=="EUR"]["CA"].sum()
-    st.caption(f"**{df_f['ID'].nunique()} commande(s)** — {ca_fcfa:,.0f} FCFA | {ca_eur:,.2f} €")
+    st.caption(f"**{df_f['ID'].nunique()} commande(s)** — CA : {ca_fcfa:,.0f} FCFA")
 
     COLS = ["Date","Lot","ID","Client","Zone","Gamme","Format","Quantité","CA","Devise",
             "Statut_Livraison","Statut_Paiement","Source"]
