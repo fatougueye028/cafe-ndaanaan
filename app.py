@@ -48,10 +48,37 @@ GAMMES          = ["Signature", "Original", "Prestige", "Épicé", "Ñooket"]
 FORMATS         = ["250g", "500g", "1kg"]
 ZONES           = ["Touba", "Dakar", "France", "Canada", "Autre"]
 LOCALISATIONS   = ["Touba", "Dakar", "France", "Canada"]
-STATUTS_LIV     = ["À préparer", "Préparée", "Livrée", "Annulée"]
 STATUTS_PAY     = ["Non payé", "Partiel", "Payé"]
 SOURCES         = ["WhatsApp", "Facebook", "TikTok", "YouTube",
                    "Recommandation", "Famille", "Autre"]
+
+# ── Pipeline commercial ────────────────────────────────────────
+TYPES_DEMANDE = [
+    "Prospect / À rappeler",
+    "Précommande",
+    "Commande confirmée",
+    "Préparée",
+    "Livrée",
+    "Annulée",
+]
+# Types qui entrent dans le CA réel
+TYPES_CA_REEL   = ["Commande confirmée", "Préparée", "Livrée"]
+# Types qui déclenchent le décrément stock
+TYPES_STOCK     = ["Préparée", "Livrée"]
+# Préfixes ID par type
+ID_PREFIXES     = {
+    "Prospect / À rappeler": "PRO",
+    "Précommande":           "PRE",
+    "Commande confirmée":    "CMD",
+    "Préparée":              "CMD",
+    "Livrée":                "CMD",
+    "Annulée":               "CMD",
+}
+DATES_PREVUES   = ["Aujourd'hui", "Cette semaine", "Ce mois",
+                   "Magal Touba", "Dans 1 mois", "Dans 2 mois", "À définir"]
+
+# Rétrocompatibilité (ancien champ Statut_Livraison)
+STATUTS_LIV = ["À préparer", "Préparée", "Livrée", "Annulée"]
 
 PRIX_FCFA = {
     ("Signature","250g"): 1500, ("Signature","500g"): 3000, ("Signature","1kg"): 6000,
@@ -112,17 +139,17 @@ def set_cell(sheet: str, df_row_idx: int, col_name: str, df: pd.DataFrame, value
     _ws(sheet).update_cell(df_row_idx + 2, col_idx, value)
     bust()
 
-def next_id(df: pd.DataFrame) -> str:
-    if df.empty or "ID" not in df.columns:
-        return "CMD-001"
+def next_id(df: pd.DataFrame, type_demande: str = "Commande confirmée") -> str:
+    year   = date.today().year
+    prefix = ID_PREFIXES.get(type_demande, "CMD")
+    full_prefix = f"{prefix}-{year}-"
     nums = []
-    for v in df["ID"].dropna().astype(str):
-        if v.startswith("CMD-"):
-            try:
-                nums.append(int(v.split("-")[1]))
-            except ValueError:
-                pass
-    return f"CMD-{(max(nums) + 1 if nums else 1):03d}"
+    if not df.empty and "ID" in df.columns:
+        for v in df["ID"].dropna().astype(str):
+            if v.startswith(full_prefix):
+                try: nums.append(int(v.split("-")[-1]))
+                except ValueError: pass
+    return f"{full_prefix}{(max(nums) + 1 if nums else 1):03d}"
 
 # ─── Navigation ────────────────────────────────────────────────
 PAGES = {
@@ -172,18 +199,36 @@ def page_dashboard():
 
     ca_fcfa   = df[df["Devise"] == "FCFA"]["CA"].sum()
     ca_eur    = df[df["Devise"] == "EUR"]["CA"].sum()
-    # Compter par ID unique (1 commande = 1 client + 1 date, même si plusieurs produits)
-    nb_total    = df["ID"].nunique()
-    nb_attente  = df[df["Statut_Livraison"].isin(["À préparer", "Préparée"])]["ID"].nunique()
-    nb_livrees  = df[df["Statut_Livraison"] == "Livrée"]["ID"].nunique()
-    non_payes   = df[df["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
+    # Colonne de statut (Type_Demande en priorité, sinon Statut_Livraison)
+    statut_col = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
+
+    # CA réel = uniquement commandes confirmées/préparées/livrées
+    df_reel = df[df[statut_col].isin(TYPES_CA_REEL + ["Livrée", "Préparée"])]
+    ca_fcfa  = df_reel[df_reel["Devise"] == "FCFA"]["CA"].sum()
+    ca_eur   = df_reel[df_reel["Devise"] == "EUR"]["CA"].sum()
+
+    # Pipeline prévisionnel
+    df_prev  = df[df[statut_col].isin(["Prospect / À rappeler", "Précommande"])]
+    ca_prev  = df_prev["CA"].sum()
+
+    nb_attente = df[df[statut_col].isin(["Commande confirmée", "À préparer", "Préparée"])]["ID"].nunique()
+    nb_livrees = df[df[statut_col] == "Livrée"]["ID"].nunique()
+    non_payes  = df_reel[df_reel["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    with c1: kpi(f"{ca_fcfa:,.0f}", "CA FCFA total")
-    with c2: kpi(f"{ca_eur:,.2f} €", "CA France total")
-    with c3: kpi(str(nb_attente), "Commandes en attente")
-    with c4: kpi(f"{non_payes.sum():,.0f}", "Paiements à recevoir (FCFA)")
-    with c5: kpi(str(nb_livrees), "Commandes livrées")
+    with c1: kpi(f"{ca_fcfa:,.0f}", "CA réel FCFA")
+    with c2: kpi(f"{ca_eur:,.2f} €", "CA réel France")
+    with c3: kpi(str(nb_attente), "À préparer / livrer")
+    with c4: kpi(f"{non_payes.sum():,.0f}", "Paiements en attente")
+    with c5: kpi(f"{ca_prev:,.0f}", "Pipeline prévisionnel")
+
+    # Alerte prospects/précommandes
+    if not df_prev.empty:
+        nb_prev = df_prev["ID"].nunique()
+        st.markdown(
+            f'<div class="alert-orange">📋 <b>{nb_prev} prospect(s)/précommande(s)</b> en attente de confirmation</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
 
@@ -273,18 +318,26 @@ def page_new_order():
     df_cmd = load("Commandes")
 
     with st.form("form_cmd", clear_on_submit=True):
+        st.subheader("Type de demande")
+        t1, t2 = st.columns(2)
+        with t1:
+            type_dem = st.selectbox("Type *", TYPES_DEMANDE, index=2,
+                help="Prospect = intention non confirmée | Précommande = réservation | Commande confirmée = vente réelle")
+        with t2:
+            date_prevue = st.selectbox("Date prévue", DATES_PREVUES, index=6)
+
         st.subheader("Client")
         c1, c2 = st.columns(2)
         with c1:
             client  = st.text_input("Nom *", placeholder="Aminata Diallo")
             tel     = st.text_input("Téléphone", placeholder="77 123 45 67")
-            source  = st.selectbox("Comment il/elle a découvert Kafe Ndaanaan ?", SOURCES)
+            source  = st.selectbox("Source", SOURCES)
         with c2:
             zone    = st.selectbox("Zone *", ZONES)
             adresse = st.text_input("Adresse (France/Canada)", placeholder="12 rue des Lilas, 75010 Paris")
             comm    = st.text_area("Commentaire / Notes", height=70)
 
-        st.subheader("Produit commandé")
+        st.subheader("Produit")
         p1, p2, p3, p4 = st.columns(4)
         with p1:
             gamme  = st.selectbox("Gamme *", GAMMES)
@@ -298,9 +351,13 @@ def page_new_order():
             prix   = st.number_input(f"Prix unitaire ({devise})", value=float(prix_d), min_value=0.0, step=0.5)
 
         ca = round(prix * qty, 2)
-        st.info(f"💰 **Montant total : {ca:,.2f} {devise}**")
+        est_reel = type_dem in TYPES_CA_REEL
+        if est_reel:
+            st.info(f"💰 **CA réel : {ca:,.2f} {devise}**")
+        else:
+            st.warning(f"📋 **Prévisionnel : {ca:,.2f} {devise}** — n'entre pas dans le CA tant que non confirmé")
 
-        lot = st.text_input("N° de Lot (optionnel)", placeholder="Lot 4")
+        lot_prevu = st.text_input("Lot prévu", placeholder="Lot 4, Lot Magal, À définir")
 
         submitted = st.form_submit_button("✅ Enregistrer", use_container_width=True, type="primary")
 
@@ -308,16 +365,17 @@ def page_new_order():
         if not client.strip():
             st.error("Le nom du client est obligatoire.")
         else:
-            new_id = next_id(df_cmd)
+            new_id = next_id(df_cmd, type_dem)
             append("Commandes", [
                 date.today().strftime("%d/%m/%Y"),
                 new_id, client.strip(), tel, adresse, zone,
                 gamme, fmt, qty, prix, ca, devise,
-                "À préparer", "Non payé",
-                source, lot, comm,
+                type_dem, "Non payé",
+                source, lot_prevu, comm, date_prevue,
             ])
-            st.success(f"✅ Commande **{new_id}** enregistrée !")
-            st.balloons()
+            st.success(f"✅ {type_dem} **{new_id}** enregistrée !")
+            if est_reel:
+                st.balloons()
 
 # ─── Page : Commandes ──────────────────────────────────────────
 def page_orders():
@@ -333,27 +391,32 @@ def page_orders():
 
     # ── KPIs rapides ──
     k1, k2, k3, k4 = st.columns(4)
-    with k1: kpi(str(df["ID"].nunique()), "Total commandes")
-    with k2: kpi(f"{df[df['Devise']=='FCFA']['CA'].sum():,.0f}", "CA Sénégal (FCFA)")
-    with k3: kpi(f"{df[df['Devise']=='EUR']['CA'].sum():,.2f} €", "CA France")
+    statut_col = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
+    df_reel = df[df[statut_col].isin(TYPES_CA_REEL + ["Livrée", "Préparée", "À préparer"])]
+    with k1: kpi(str(df["ID"].nunique()), "Total (toutes demandes)")
+    with k2: kpi(f"{df_reel[df_reel['Devise']=='FCFA']['CA'].sum():,.0f}", "CA réel FCFA")
+    with k3: kpi(f"{df_reel[df_reel['Devise']=='EUR']['CA'].sum():,.2f} €", "CA réel France")
     with k4:
-        non_payes = df[df["Statut_Paiement"].isin(["Non payé","Partiel"])]["CA"].sum()
+        non_payes = df_reel[df_reel["Statut_Paiement"].isin(["Non payé","Partiel"])]["CA"].sum()
         kpi(f"{non_payes:,.0f}", "Paiements en attente")
 
     st.markdown("---")
 
     # ── Filtres ──
+    statut_col = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
+    statut_vals = TYPES_DEMANDE if statut_col == "Type_Demande" else STATUTS_LIV
+
     with st.expander("🔍 Filtres", expanded=False):
         f1, f2, f3, f4 = st.columns(4)
-        with f1: fz = st.multiselect("Zone",      ZONES,       default=ZONES)
-        with f2: fl = st.multiselect("Livraison", STATUTS_LIV, default=STATUTS_LIV)
-        with f3: fp = st.multiselect("Paiement",  STATUTS_PAY, default=STATUTS_PAY)
-        with f4: fg = st.multiselect("Gamme",     GAMMES,      default=GAMMES)
+        with f1: fz = st.multiselect("Zone",      ZONES,        default=ZONES)
+        with f2: fl = st.multiselect("Statut",    statut_vals,  default=statut_vals)
+        with f3: fp = st.multiselect("Paiement",  STATUTS_PAY,  default=STATUTS_PAY)
+        with f4: fg = st.multiselect("Gamme",     GAMMES,       default=GAMMES)
         recherche = st.text_input("🔎 Rechercher un client", placeholder="Nom du client…")
 
     mask = (
         df["Zone"].isin(fz)
-        & df["Statut_Livraison"].isin(fl)
+        & df[statut_col].isin(fl)
         & df["Statut_Paiement"].isin(fp)
         & df["Gamme"].isin(fg)
     )
@@ -417,8 +480,10 @@ def page_orders():
         ws.update_cell(sheet_row, col_p, new_pay)
         ws.update_cell(sheet_row, col_c, new_comm)
 
-        # Décrémenter stock si passage à "Livrée"
-        if new_liv == "Livrée" and row["Statut_Livraison"] != "Livrée":
+        # Décrémenter stock uniquement si passage à "Préparée" ou "Livrée"
+        statut_col_local = "Type_Demande" if "Type_Demande" in df_full.columns else "Statut_Livraison"
+        ancien_statut = row.get(statut_col_local, "")
+        if new_liv in TYPES_STOCK and ancien_statut not in TYPES_STOCK:
             _decrement_stock(row)
 
         bust()

@@ -50,7 +50,7 @@ SHEETS = {
     "Commandes": [
         "Date", "ID", "Client", "Téléphone", "Adresse", "Zone",
         "Gamme", "Format", "Quantité", "Prix_Unitaire", "CA", "Devise",
-        "Statut_Livraison", "Statut_Paiement", "Source", "Lot", "Commentaire",
+        "Type_Demande", "Statut_Paiement", "Source", "Lot", "Commentaire", "Date_Prevue",
     ],
     "Stock": [
         "Date", "Lot", "Gamme", "Format",
