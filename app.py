@@ -410,10 +410,14 @@ def page_orders():
     df_prev = df[df[statut_col].isin(PREV)]
 
     # ── KPIs ──
+    nb_total   = df["ID"].nunique()
+    nb_livrees = df[df[statut_col] == "Livrée"]["ID"].nunique()
+    nb_a_prep  = df[df[statut_col].isin(["Commande confirmée", "À préparer"])]["ID"].nunique()
+
     k1, k2, k3, k4 = st.columns(4)
-    with k1: kpi(str(df["ID"].nunique()), "Total commandes")
-    with k2: kpi(f"{df_reel[df_reel['Devise']=='FCFA']['CA'].sum():,.0f}", "CA réel (FCFA)")
-    with k3: kpi(str(df_reel[df_reel[statut_col].isin(["Commande confirmée","À préparer","Préparée"])]["ID"].nunique()), "À livrer")
+    with k1: kpi(str(nb_total),   "Total commandes")
+    with k2: kpi(str(nb_livrees), "CMD livrées")
+    with k3: kpi(str(nb_a_prep),  "À préparer (confirmées)")
     with k4:
         kpi(f"{df_reel[df_reel['Statut_Paiement'].isin(['Non payé','Partiel'])]['CA'].sum():,.0f}", "Paiements en attente")
 
