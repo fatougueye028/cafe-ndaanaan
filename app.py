@@ -212,15 +212,17 @@ def page_dashboard():
     df_prev  = df[df[statut_col].isin(["Prospect / À rappeler", "Précommande"])]
     ca_prev  = df_prev["CA"].sum()
 
-    nb_attente = df[df[statut_col].isin(["Commande confirmée", "À préparer", "Préparée"])]["ID"].nunique()
-    nb_livrees = df[df[statut_col] == "Livrée"]["ID"].nunique()
-    non_payes  = df_reel[df_reel["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
+    nb_attente   = df[df[statut_col].isin(["Commande confirmée", "À préparer", "Préparée"])]["ID"].nunique()
+    nb_livrees   = df[df[statut_col] == "Livrée"]["ID"].nunique()
+    non_payes    = df_reel[df_reel["Statut_Paiement"].isin(["Non payé", "Partiel"])]["CA"]
+    ca_encaisse  = df_reel[df_reel["Statut_Paiement"] == "Payé"]["CA"].sum()
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1: kpi(f"{ca_fcfa:,.0f}", "CA réel FCFA")
-    with c2: kpi(str(nb_attente), "À préparer / livrer")
-    with c3: kpi(f"{non_payes.sum():,.0f}", "Paiements en attente")
-    with c4: kpi(f"{ca_prev:,.0f}", "Pipeline prévisionnel")
+    with c2: kpi(f"{ca_encaisse:,.0f}", "Total encaissé (FCFA)")
+    with c3: kpi(str(nb_attente), "À préparer / livrer")
+    with c4: kpi(f"{non_payes.sum():,.0f}", "Paiements en attente")
+    with c5: kpi(f"{ca_prev:,.0f}", "Pipeline prévisionnel")
 
     # Alerte prospects/précommandes
     if not df_prev.empty:
