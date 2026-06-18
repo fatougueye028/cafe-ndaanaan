@@ -409,15 +409,16 @@ def page_orders():
     PREV = ["Prospect / À rappeler", "Précommande"]
     df_prev = df[df[statut_col].isin(PREV)]
 
-    # ── KPIs ──
+    # ── KPIs — utilise Statut_Livraison pour les statuts opérationnels ──
+    col_liv = "Statut_Livraison" if "Statut_Livraison" in df.columns else statut_col
     nb_total   = df["ID"].nunique()
-    nb_livrees = df[df[statut_col] == "Livrée"]["ID"].nunique()
-    nb_a_prep  = df[df[statut_col].isin(["Commande confirmée", "À préparer"])]["ID"].nunique()
+    nb_livrees = df[df[col_liv] == "Livrée"]["ID"].nunique()
+    nb_a_prep  = df[df[col_liv].isin(["À préparer", "Préparée"])]["ID"].nunique()
 
     k1, k2, k3, k4 = st.columns(4)
     with k1: kpi(str(nb_total),   "Total commandes")
     with k2: kpi(str(nb_livrees), "CMD livrées")
-    with k3: kpi(str(nb_a_prep),  "À préparer (confirmées)")
+    with k3: kpi(str(nb_a_prep),  "À préparer / Préparées")
     with k4:
         kpi(f"{df_reel[df_reel['Statut_Paiement'].isin(['Non payé','Partiel'])]['CA'].sum():,.0f}", "Paiements en attente")
 
