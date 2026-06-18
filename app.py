@@ -401,9 +401,12 @@ def page_orders():
     statut_col  = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
     statut_vals = sorted(df[statut_col].dropna().unique().tolist()) if statut_col in df.columns else TYPES_DEMANDE
 
-    # CA réel = Type_Demande confirmé/préparé/livré
+    # CA réel = commandes confirmées uniquement (hors prospects et précommandes)
     REEL = ["Commande confirmée", "Préparée", "Livrée", "À préparer"]
-    df_reel = df[df[statut_col].isin(REEL)]
+    df_reel = df[
+        df[statut_col].isin(REEL) &
+        ~df[statut_col].isin(["Prospect / À rappeler", "Précommande"])
+    ]
 
     # Prospects / précommandes
     PREV = ["Prospect / À rappeler", "Précommande"]
