@@ -397,23 +397,35 @@ def page_orders():
     df["CA"]       = pd.to_numeric(df["CA"],       errors="coerce").fillna(0)
     df["Quantité"] = pd.to_numeric(df["Quantité"], errors="coerce").fillna(0)
 
-    # ── KPIs rapides ──
+    # Colonne de statut active
+    statut_col  = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
+    statut_vals = sorted(df[statut_col].dropna().unique().tolist()) if statut_col in df.columns else TYPES_DEMANDE
+
+    # CA réel = Type_Demande confirmé/préparé/livré
+    REEL = ["Commande confirmée", "Préparée", "Livrée", "À préparer"]
+    df_reel = df[df[statut_col].isin(REEL)]
+
+    # Prospects / précommandes
+    PREV = ["Prospect / À rappeler", "Précommande"]
+    df_prev = df[df[statut_col].isin(PREV)]
+
+    # ── KPIs ──
     k1, k2, k3, k4 = st.columns(4)
-    statut_col = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
-    df_reel = df[df[statut_col].isin(TYPES_CA_REEL + ["Livrée", "Préparée", "À préparer"])]
-    with k1: kpi(str(df["ID"].nunique()), "Total (toutes demandes)")
-    with k2: kpi(f"{df_reel[df_reel['Devise']=='FCFA']['CA'].sum():,.0f}", "CA réel FCFA")
-    with k3: kpi(str(df_reel["ID"].nunique()), "Commandes confirmées")
+    with k1: kpi(str(df["ID"].nunique()), "Total commandes")
+    with k2: kpi(f"{df_reel[df_reel['Devise']=='FCFA']['CA'].sum():,.0f}", "CA réel (FCFA)")
+    with k3: kpi(str(df_reel[df_reel[statut_col].isin(["Commande confirmée","À préparer","Préparée"])]["ID"].nunique()), "À livrer")
     with k4:
-        non_payes = df_reel[df_reel["Statut_Paiement"].isin(["Non payé","Partiel"])]["CA"].sum()
-        kpi(f"{non_payes:,.0f}", "Paiements en attente")
+        kpi(f"{df_reel[df_reel['Statut_Paiement'].isin(['Non payé','Partiel'])]['CA'].sum():,.0f}", "Paiements en attente")
+
+    if not df_prev.empty:
+        st.markdown(
+            f'<div class="alert-orange">📋 <b>{df_prev["ID"].nunique()} prospect(s)/précommande(s)</b> à confirmer</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
 
     # ── Filtres ──
-    statut_col = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
-    statut_vals = TYPES_DEMANDE if statut_col == "Type_Demande" else STATUTS_LIV
-
     with st.expander("🔍 Filtres", expanded=False):
         f1, f2, f3, f4 = st.columns(4)
         with f1: fz = st.multiselect("Zone",      ZONES,        default=ZONES)
@@ -432,21 +444,26 @@ def page_orders():
     if recherche.strip():
         df_f = df_f[df_f["Client"].str.contains(recherche.strip(), case=False, na=False)]
 
-    ca_fcfa = df_f[df_f["Devise"]=="FCFA"]["CA"].sum()
+    ca_fcfa = df_f[df_f["Devise"] == "FCFA"]["CA"].sum()
     st.caption(f"**{df_f['ID'].nunique()} commande(s)** — CA : {ca_fcfa:,.0f} FCFA")
 
-    COLS = ["Date","Lot","ID","Client","Zone","Gamme","Format","Quantité","CA","Devise",
-            "Statut_Livraison","Statut_Paiement","Source"]
-    COLS = [c for c in COLS if c in df_f.columns]
+    # Colonnes affichées — toutes les colonnes présentes dans le sheet
+    COLS_PRIORITE = ["Date","Lot","ID","Client","Zone","Gamme","Format",
+                     "Quantité","CA","Type_Demande","Statut_Livraison",
+                     "Statut_Paiement","Source","Date_Prevue","Offre_Commerciale","Commentaire"]
+    COLS = [c for c in COLS_PRIORITE if c in df_f.columns]
 
     st.dataframe(
         df_f[COLS],
         use_container_width=True,
         hide_index=True,
         column_config={
-            "CA":               st.column_config.NumberColumn(format="%.0f"),
-            "Statut_Livraison": st.column_config.SelectboxColumn(options=STATUTS_LIV),
-            "Statut_Paiement":  st.column_config.SelectboxColumn(options=STATUTS_PAY),
+            "CA":               st.column_config.NumberColumn("CA (FCFA)", format="%.0f"),
+            "Type_Demande":     st.column_config.SelectboxColumn("Type", options=TYPES_DEMANDE),
+            "Statut_Livraison": st.column_config.SelectboxColumn("Livraison", options=STATUTS_LIV),
+            "Statut_Paiement":  st.column_config.SelectboxColumn("Paiement", options=STATUTS_PAY),
+            "Date_Prevue":      st.column_config.TextColumn("Date prévue"),
+            "Offre_Commerciale":st.column_config.TextColumn("Offre comm."),
         },
     )
 
