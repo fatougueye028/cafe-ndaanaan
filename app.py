@@ -132,7 +132,7 @@ PAGES = {
     "📦 Stock":             "stock",
     "🏭 Production":        "production",
     "🎨 Sachets & Affiches": "sachets",
-    "🚚 Livreurs":          "livreurs",
+    "🚚 Livraisons":        "livreurs",
 }
 
 def sidebar_nav() -> str:
