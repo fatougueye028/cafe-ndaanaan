@@ -83,9 +83,9 @@ STATUTS_LIV = ["À préparer", "Préparée", "Livrée", "Annulée"]
 PRIX_FCFA = {
     ("Signature","250g"): 1500, ("Signature","500g"): 3000, ("Signature","1kg"): 6000,
     ("Original", "250g"): 1500, ("Original", "500g"): 3000, ("Original", "1kg"): 6000,
-    ("Prestige", "250g"): 2000, ("Prestige", "500g"): 3500, ("Prestige", "1kg"): 7000,
-    ("Épicé",    "250g"): 2000, ("Épicé",    "500g"): 3500, ("Épicé",    "1kg"): 7000,
-    ("Ñooket",   "250g"): 2000, ("Ñooket",   "500g"): 3500, ("Ñooket",   "1kg"): 7000,
+    ("Prestige", "250g"): 1500, ("Prestige", "500g"): 3000, ("Prestige", "1kg"): 6000,
+    ("Épicé",    "250g"): 2000, ("Épicé",    "500g"): 3000, ("Épicé",    "1kg"): 6000,
+    ("Ñooket",   "250g"): 2000, ("Ñooket",   "500g"): 3000, ("Ñooket",   "1kg"): 6000,
 }
 PRIX_EUR = {
     ("Signature","250g"): 6.50,  ("Signature","500g"): 10.90, ("Signature","1kg"): 20.00,
