@@ -365,8 +365,8 @@ def page_orders():
     ca_eur  = df_f[df_f["Devise"]=="EUR"]["CA"].sum()
     st.caption(f"**{df_f['ID'].nunique()} commande(s)** — {ca_fcfa:,.0f} FCFA | {ca_eur:,.2f} €")
 
-    COLS = ["Date","ID","Client","Zone","Gamme","Format","Quantité","CA","Devise",
-            "Statut_Livraison","Statut_Paiement","Source","Lot"]
+    COLS = ["Date","Lot","ID","Client","Zone","Gamme","Format","Quantité","CA","Devise",
+            "Statut_Livraison","Statut_Paiement","Source"]
     COLS = [c for c in COLS if c in df_f.columns]
 
     st.dataframe(
