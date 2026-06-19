@@ -319,12 +319,16 @@ def page_new_order():
 
     df_cmd = load("Commandes")
 
-    with st.form("form_cmd", clear_on_submit=True):
+    # Initialiser la liste de produits en session
+    if "produits" not in st.session_state:
+        st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0}]
+
+    # ── Infos client ──
+    with st.form("form_cmd", clear_on_submit=False):
         st.subheader("Type de demande")
         t1, t2 = st.columns(2)
         with t1:
-            type_dem = st.selectbox("Type *", TYPES_DEMANDE, index=2,
-                help="Prospect = intention non confirmée | Précommande = réservation | Commande confirmée = vente réelle")
+            type_dem = st.selectbox("Type *", TYPES_DEMANDE, index=2)
         with t2:
             date_prevue = st.selectbox("Date prévue", DATES_PREVUES, index=6)
 
@@ -339,53 +343,78 @@ def page_new_order():
             adresse = st.text_input("Adresse (France/Canada)", placeholder="12 rue des Lilas, 75010 Paris")
             comm    = st.text_area("Commentaire / Notes", height=70)
 
-        st.subheader("Produit")
-        p1, p2, p3, p4 = st.columns(4)
-        with p1:
-            gamme  = st.selectbox("Gamme *", GAMMES)
-        with p2:
-            fmt    = st.selectbox("Format *", FORMATS)
-        with p3:
-            qty    = st.number_input("Quantité *", min_value=1, value=1)
-        with p4:
-            devise = "EUR" if zone == "France" else ("CAD" if zone == "Canada" else "FCFA")
-            prix_d = PRIX_EUR.get((gamme, fmt), 0) if devise == "EUR" else PRIX_FCFA.get((gamme, fmt), 0)
-            prix   = st.number_input(f"Prix unitaire ({devise})", value=float(prix_d), min_value=0.0, step=0.5)
-
-        ca = round(prix * qty, 2)
-        est_reel = type_dem in TYPES_CA_REEL
-        if est_reel:
-            st.info(f"💰 **CA réel : {ca:,.2f} {devise}**")
-        else:
-            st.warning(f"📋 **Prévisionnel : {ca:,.2f} {devise}** — n'entre pas dans le CA tant que non confirmé")
-
         l1, l2 = st.columns(2)
         with l1:
             lot_prevu = st.text_input("Lot prévu", placeholder="Lot 4, Lot Magal, À définir")
         with l2:
             offert = st.checkbox("🎁 Offre commerciale")
 
-        submitted = st.form_submit_button("✅ Enregistrer", use_container_width=True, type="primary")
+        # ── Produits ──
+        st.subheader("Produits")
+        devise = "EUR" if zone == "France" else ("CAD" if zone == "Canada" else "FCFA")
+
+        for i, prod in enumerate(st.session_state.produits):
+            p1, p2, p3, p4 = st.columns(4)
+            with p1:
+                g = st.selectbox("Gamme", GAMMES,
+                    index=GAMMES.index(prod["gamme"]) if prod["gamme"] in GAMMES else 0,
+                    key=f"gamme_{i}")
+            with p2:
+                f = st.selectbox("Format", FORMATS,
+                    index=FORMATS.index(prod["fmt"]) if prod["fmt"] in FORMATS else 1,
+                    key=f"fmt_{i}")
+            with p3:
+                q = st.number_input("Quantité", min_value=1, value=prod["qty"], key=f"qty_{i}")
+            with p4:
+                prix_d = PRIX_EUR.get((g, f), 0) if devise == "EUR" else PRIX_FCFA.get((g, f), 0)
+                p = st.number_input(f"Prix ({devise})", value=float(prix_d), min_value=0.0, step=0.5, key=f"prix_{i}")
+            st.session_state.produits[i] = {"gamme": g, "fmt": f, "qty": q, "prix": p}
+
+        ca_total = sum(round(p["prix"] * p["qty"], 2) for p in st.session_state.produits)
+        est_reel = type_dem in TYPES_CA_REEL
+        if est_reel:
+            st.info(f"💰 **CA total : {ca_total:,.2f} {devise}** ({len(st.session_state.produits)} produit(s))")
+        else:
+            st.warning(f"📋 **Prévisionnel : {ca_total:,.2f} {devise}**")
+
+        submitted = st.form_submit_button("✅ Enregistrer la commande", use_container_width=True, type="primary")
+
+    # Boutons hors du form pour ajouter/supprimer des produits
+    col_add, col_del = st.columns(2)
+    with col_add:
+        if st.button("➕ Ajouter un produit", use_container_width=True):
+            st.session_state.produits.append({"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0})
+            st.rerun()
+    with col_del:
+        if len(st.session_state.produits) > 1:
+            if st.button("➖ Supprimer le dernier produit", use_container_width=True):
+                st.session_state.produits.pop()
+                st.rerun()
 
     if submitted:
         if not client.strip():
             st.error("Le nom du client est obligatoire.")
         else:
-            new_id = next_id(df_cmd, type_dem)
-            # Statut_Livraison déduit du Type_Demande
+            new_id     = next_id(df_cmd, type_dem)
             statut_liv = {"Livrée": "Livrée", "Préparée": "Préparée",
                           "Annulée": "Annulée"}.get(type_dem, "À préparer")
-            append("Commandes", [
-                date.today().strftime("%d/%m/%Y"),
-                new_id, client.strip(), tel, adresse, zone,
-                gamme, fmt, qty, prix, ca, devise,
-                type_dem, statut_liv, "Non payé",
-                source, lot_prevu, comm, date_prevue,
-                "Offre commerciale" if offert else "",
-            ])
-            st.success(f"✅ {type_dem} **{new_id}** enregistrée !")
+            offre_val  = "Offre commerciale" if offert else ""
+
+            for prod in st.session_state.produits:
+                ca_ligne = round(prod["prix"] * prod["qty"], 2)
+                append("Commandes", [
+                    date.today().strftime("%d/%m/%Y"),
+                    new_id, client.strip(), tel, adresse, zone,
+                    prod["gamme"], prod["fmt"], prod["qty"], prod["prix"], ca_ligne, devise,
+                    type_dem, statut_liv, "Non payé",
+                    source, lot_prevu, comm, date_prevue, offre_val,
+                ])
+
+            st.success(f"✅ {type_dem} **{new_id}** — {len(st.session_state.produits)} produit(s) enregistré(s) !")
+            st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0}]
             if est_reel:
                 st.balloons()
+            bust()
 
 # ─── Page : Commandes ──────────────────────────────────────────
 def page_orders():
