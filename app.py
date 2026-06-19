@@ -513,6 +513,36 @@ def page_orders():
             }
         )
 
+    # ── Tableau : Livrées non payées ─────────────────────────────
+    st.markdown("---")
+    st.subheader("💸 Commandes livrées non payées")
+
+    col_liv = "Statut_Livraison" if "Statut_Livraison" in df.columns else statut_col
+    mask_liv_nonpay = (
+        (df[col_liv] == "Livrée") &
+        (df["Statut_Paiement"].isin(["Non payé", "Partiel"]))
+    )
+    df_liv_np = df[mask_liv_nonpay].copy()
+
+    if df_liv_np.empty:
+        st.success("✅ Toutes les commandes livrées sont payées.")
+    else:
+        df_liv_np["CA"] = pd.to_numeric(df_liv_np["CA"], errors="coerce").fillna(0)
+        total_du = df_liv_np["CA"].sum()
+        st.markdown(
+            f'<div class="alert-rouge">🔴 <b>{df_liv_np["ID"].nunique()} commande(s) livrées non payées — {total_du:,.0f} FCFA à récupérer</b></div>',
+            unsafe_allow_html=True,
+        )
+        COLS_NP = ["Date","Lot","ID","Client","Zone","Gamme","Format",
+                   "Quantité","CA","Statut_Paiement","Commentaire"]
+        COLS_NP = [c for c in COLS_NP if c in df_liv_np.columns]
+        st.dataframe(
+            df_liv_np[COLS_NP],
+            use_container_width=True,
+            hide_index=True,
+            column_config={"CA": st.column_config.NumberColumn("CA (FCFA)", format="%.0f")}
+        )
+
     st.markdown("---")
 
     # ── Filtres ──
