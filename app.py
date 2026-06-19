@@ -46,7 +46,7 @@ st.markdown("""
 # ─── Constantes métier ─────────────────────────────────────────
 GAMMES          = ["Signature", "Original", "Prestige", "Épicé", "Ñooket"]
 FORMATS         = ["250g", "500g", "1kg"]
-ZONES           = ["Touba", "Dakar", "France", "Canada", "Autre"]
+ZONES           = ["Touba", "Dakar", "France", "Canada", "Espagne", "Europe", "USA", "Autre"]
 LOCALISATIONS   = ["Touba", "Dakar", "France", "Canada"]
 STATUTS_PAY     = ["Non payé", "Partiel", "Payé"]
 SOURCES         = ["WhatsApp", "Facebook", "TikTok", "YouTube",
@@ -348,8 +348,7 @@ def page_new_order():
             source  = st.selectbox("Source", SOURCES)
         with c2:
             zone    = st.selectbox("Zone *", ZONES)
-            adresse = st.text_input("Adresse (France/Canada)", placeholder="12 rue des Lilas, 75010 Paris")
-            comm    = st.text_area("Commentaire / Notes", height=70)
+            comm    = st.text_area("Commentaire / Notes", height=70, placeholder="Notes internes, instructions de livraison…")
 
         l1, l2 = st.columns(2)
         with l1:
@@ -411,26 +410,25 @@ def page_new_order():
             for prod in st.session_state.produits:
                 ca_ligne = round(prod["prix"] * prod["qty"], 2)
                 append_dict("Commandes", {
-                    "Date":             date.today().strftime("%d/%m/%Y"),
-                    "ID":               new_id,
-                    "Client":           client.strip(),
-                    "Téléphone":        tel,
-                    "Adresse":          adresse,
-                    "Zone":             zone,
-                    "Gamme":            prod["gamme"],
-                    "Format":           prod["fmt"],
-                    "Quantité":         prod["qty"],
-                    "Prix_Unitaire":    prod["prix"],
-                    "CA":               ca_ligne,
-                    "Devise":           devise,
-                    "Type_Demande":     type_dem,
-                    "Statut_Livraison": statut_liv,
-                    "Statut_Paiement":  "Non payé",
-                    "Source":           source,
-                    "Lot":              lot_prevu,
-                    "Commentaire":      comm,
-                    "Date_Prevue":      date_prevue,
+                    "Date":              date.today().strftime("%d/%m/%Y"),
+                    "ID":                new_id,
+                    "Client":            client.strip(),
+                    "Téléphone":         tel,
+                    "Zone":              zone,
+                    "Source":            source,
+                    "Gamme":             prod["gamme"],
+                    "Format":            prod["fmt"],
+                    "Quantité":          prod["qty"],
+                    "Prix_Unitaire":     prod["prix"],
+                    "CA":                ca_ligne,
+                    "Devise":            devise,
+                    "Type_Demande":      type_dem,
+                    "Statut_Livraison":  statut_liv,
+                    "Statut_Paiement":   "Non payé",
+                    "Lot":               lot_prevu,
                     "Offre_Commerciale": offre_val,
+                    "Date_Prevue":       date_prevue,
+                    "Commentaire":       comm,
                 })
 
             st.success(f"✅ {type_dem} **{new_id}** — {len(st.session_state.produits)} produit(s) enregistré(s) !")
@@ -546,12 +544,16 @@ def page_orders():
     st.markdown("---")
 
     # ── Filtres ──
+    # Valeurs dynamiques depuis les données réelles
+    zones_dispo = sorted(df["Zone"].dropna().unique().tolist()) if "Zone" in df.columns else ZONES
+    gammes_dispo = sorted(df["Gamme"].dropna().unique().tolist()) if "Gamme" in df.columns else GAMMES
+
     with st.expander("🔍 Filtres", expanded=False):
         f1, f2, f3, f4 = st.columns(4)
-        with f1: fz = st.multiselect("Zone",      ZONES,        default=ZONES)
-        with f2: fl = st.multiselect("Statut",    statut_vals,  default=statut_vals)
-        with f3: fp = st.multiselect("Paiement",  STATUTS_PAY,  default=STATUTS_PAY)
-        with f4: fg = st.multiselect("Gamme",     GAMMES,       default=GAMMES)
+        with f1: fz = st.multiselect("Zone",     zones_dispo,  default=zones_dispo)
+        with f2: fl = st.multiselect("Statut",   statut_vals,  default=statut_vals)
+        with f3: fp = st.multiselect("Paiement", STATUTS_PAY,  default=STATUTS_PAY)
+        with f4: fg = st.multiselect("Gamme",    gammes_dispo, default=gammes_dispo)
         recherche = st.text_input("🔎 Rechercher un client", placeholder="Nom du client…")
 
     mask = (
