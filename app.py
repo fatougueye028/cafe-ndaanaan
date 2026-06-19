@@ -220,7 +220,7 @@ def page_dashboard():
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1: kpi(f"{ca_fcfa:,.0f}", "CA réel FCFA")
     with c2: kpi(f"{ca_encaisse:,.0f}", "Total encaissé (FCFA)")
-    with c3: kpi(str(nb_attente), "À préparer / livrer")
+    with c3: kpi(str(df["ID"].nunique()), "Total commandes")
     with c4: kpi(f"{non_payes.sum():,.0f}", "Paiements en attente")
     with c5: kpi(f"{ca_prev:,.0f}", "Pipeline prévisionnel")
 
