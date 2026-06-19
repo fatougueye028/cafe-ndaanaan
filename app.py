@@ -133,6 +133,14 @@ def append(sheet: str, row: list):
     _ws(sheet).append_row(row, value_input_option="RAW")
     bust()
 
+def append_dict(sheet: str, data: dict):
+    """Insère une ligne en respectant l'ordre réel des colonnes du Sheet."""
+    ws = _ws(sheet)
+    headers = ws.row_values(1)
+    row = [data.get(h, "") for h in headers]
+    ws.append_row(row, value_input_option="RAW")
+    bust()
+
 def set_cell(sheet: str, df_row_idx: int, col_name: str, df: pd.DataFrame, value):
     """df_row_idx est l'index pandas (0-based). +2 = header + base 1."""
     col_idx = list(df.columns).index(col_name) + 1
@@ -402,13 +410,28 @@ def page_new_order():
 
             for prod in st.session_state.produits:
                 ca_ligne = round(prod["prix"] * prod["qty"], 2)
-                append("Commandes", [
-                    date.today().strftime("%d/%m/%Y"),
-                    new_id, client.strip(), tel, adresse, zone,
-                    prod["gamme"], prod["fmt"], prod["qty"], prod["prix"], ca_ligne, devise,
-                    type_dem, statut_liv, "Non payé",
-                    source, lot_prevu, comm, date_prevue, offre_val,
-                ])
+                append_dict("Commandes", {
+                    "Date":             date.today().strftime("%d/%m/%Y"),
+                    "ID":               new_id,
+                    "Client":           client.strip(),
+                    "Téléphone":        tel,
+                    "Adresse":          adresse,
+                    "Zone":             zone,
+                    "Gamme":            prod["gamme"],
+                    "Format":           prod["fmt"],
+                    "Quantité":         prod["qty"],
+                    "Prix_Unitaire":    prod["prix"],
+                    "CA":               ca_ligne,
+                    "Devise":           devise,
+                    "Type_Demande":     type_dem,
+                    "Statut_Livraison": statut_liv,
+                    "Statut_Paiement":  "Non payé",
+                    "Source":           source,
+                    "Lot":              lot_prevu,
+                    "Commentaire":      comm,
+                    "Date_Prevue":      date_prevue,
+                    "Offre_Commerciale": offre_val,
+                })
 
             st.success(f"✅ {type_dem} **{new_id}** — {len(st.session_state.produits)} produit(s) enregistré(s) !")
             st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0}]
