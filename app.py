@@ -438,6 +438,29 @@ def page_orders():
             unsafe_allow_html=True,
         )
 
+    # ── Tableau : Commandes à préparer ──────────────────────────
+    st.markdown("---")
+    st.subheader("🔔 Commandes à préparer")
+
+    df_a_prep = df[mask_prep].copy()
+    if df_a_prep.empty:
+        st.success("✅ Aucune commande en attente de préparation.")
+    else:
+        COLS_PREP = ["Date","Lot","ID","Client","Zone","Gamme","Format",
+                     "Quantité","CA","Statut_Livraison","Statut_Paiement","Date_Prevue","Commentaire"]
+        COLS_PREP = [c for c in COLS_PREP if c in df_a_prep.columns]
+        st.dataframe(
+            df_a_prep[COLS_PREP].sort_values("Date_Prevue") if "Date_Prevue" in df_a_prep.columns
+            else df_a_prep[COLS_PREP],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "CA":               st.column_config.NumberColumn("CA (FCFA)", format="%.0f"),
+                "Statut_Livraison": st.column_config.TextColumn("Statut"),
+                "Date_Prevue":      st.column_config.TextColumn("Date prévue"),
+            }
+        )
+
     st.markdown("---")
 
     # ── Filtres ──
