@@ -59,12 +59,24 @@ TYPES_DEMANDE = [
     "Commande confirmée",
     "Préparée",
     "Livrée",
+    "Clôturée",
     "Annulée",
 ]
 # Types qui entrent dans le CA réel
-TYPES_CA_REEL   = ["Commande confirmée", "Préparée", "Livrée"]
-# Types qui déclenchent le décrément stock
+TYPES_CA_REEL   = ["Commande confirmée", "Préparée", "Livrée", "Clôturée"]
+# Types qui déclenchent le décrément stock café
 TYPES_STOCK     = ["Préparée", "Livrée"]
+# Types qui déclenchent le décrément sachets
+TYPES_SACHET    = ["Préparée"]
+
+# Mapping Gamme → Couleur sachet
+GAMME_SACHET = {
+    "Signature": "Blanc",
+    "Prestige":  "Noir",
+    "Original":  "Doré",
+    "Ñooket":    "Doré vif",
+    "Épicé":     "Argenté",
+}
 # Préfixes ID par type
 ID_PREFIXES     = {
     "Prospect / À rappeler": "PRO",
@@ -626,14 +638,26 @@ def page_orders():
         ws.update_cell(sheet_row, col_p, new_pay)
         ws.update_cell(sheet_row, col_c, new_comm)
 
-        # Décrémenter stock uniquement si passage à "Préparée" ou "Livrée"
         statut_col_local = "Type_Demande" if "Type_Demande" in df_full.columns else "Statut_Livraison"
         ancien_statut = row.get(statut_col_local, "")
+
+        # Décrémenter stock café : Préparée ou Livrée
         if new_liv in TYPES_STOCK and ancien_statut not in TYPES_STOCK:
             _decrement_stock(row)
 
+        # Décrémenter sachets : uniquement à la Préparation
+        if new_liv in TYPES_SACHET and ancien_statut not in TYPES_SACHET:
+            _decrement_sachet(row)
+
+        # Auto-clôturer si Livrée + Payé
+        if new_liv == "Livrée" and new_pay == "Payé":
+            if "Type_Demande" in df_full.columns:
+                col_td = list(df_full.columns).index("Type_Demande") + 1
+                ws.update_cell(sheet_row, col_td, "Clôturée")
+
         bust()
-        st.success(f"✅ Commande {sel_id} mise à jour !")
+        st.success(f"✅ Commande {sel_id} mise à jour !"
+                   + (" — 🎯 Clôturée automatiquement" if new_liv == "Livrée" and new_pay == "Payé" else ""))
         st.rerun()
 
 def _update_stock_row(df_s, idx, qty_delta_vend=0, qty_delta_prod=0, qty_delta_cmd=0):
@@ -665,7 +689,7 @@ def _update_stock_row(df_s, idx, qty_delta_vend=0, qty_delta_prod=0, qty_delta_c
         ws_s.update_cell(idx + 2, cols.index("Derniere_MAJ") + 1, today_s)
 
 def _decrement_stock(row):
-    """Incrémente Unites_Vendues quand une commande passe à Livrée."""
+    """Décrémente le stock café quand une commande passe à Préparée/Livrée."""
     try:
         df_s = load("Stock")
         if df_s.empty:
@@ -674,13 +698,44 @@ def _decrement_stock(row):
         mask = (df_s["Gamme"] == row["Gamme"]) & (df_s["Format"] == row["Format"])
         if not mask.any():
             return
-        # Prendre la ligne avec le plus de stock restant
         idx = df_s[mask].sort_values("Stock_Restant", ascending=False).index[0] \
               if "Stock_Restant" in df_s.columns else df_s.index[mask][0]
         _update_stock_row(df_s, idx, qty_delta_vend=qty, qty_delta_cmd=qty)
         bust()
     except Exception as e:
-        st.warning(f"⚠️ Stock non décrémenté : {e}")
+        st.warning(f"⚠️ Stock café non décrémenté : {e}")
+
+def _decrement_sachet(row):
+    """Décrémente le stock sachets quand une commande passe à Préparée."""
+    try:
+        gamme  = str(row.get("Gamme", "")).strip()
+        fmt    = str(row.get("Format", "")).strip()
+        qty    = int(pd.to_numeric(row.get("Quantité", 0), errors="coerce") or 0)
+        couleur = GAMME_SACHET.get(gamme)
+        if not couleur or qty == 0:
+            return
+        df_sac = load("Sachets")
+        if df_sac.empty:
+            return
+        mask = (df_sac["Couleur"] == couleur) & (df_sac["Format"] == fmt)
+        if not mask.any():
+            return
+        idx = df_sac.index[mask][0]
+        ws_s  = _ws("Sachets")
+        cols  = list(df_sac.columns)
+        # Incrémenter Qte_Utilisee
+        if "Qte_Utilisee" in cols:
+            col_u = cols.index("Qte_Utilisee") + 1
+            current = int(pd.to_numeric(df_sac.loc[idx, "Qte_Utilisee"], errors="coerce") or 0)
+            ws_s.update_cell(idx + 2, col_u, current + qty)
+        # Décrémenter Stock_Restant
+        if "Stock_Restant" in cols:
+            col_r = cols.index("Stock_Restant") + 1
+            current_r = int(pd.to_numeric(df_sac.loc[idx, "Stock_Restant"], errors="coerce") or 0)
+            ws_s.update_cell(idx + 2, col_r, max(0, current_r - qty))
+        bust()
+    except Exception as e:
+        st.warning(f"⚠️ Stock sachets non décrémenté : {e}")
 
 # ─── Page : Stock ──────────────────────────────────────────────
 def page_stock():
@@ -817,6 +872,20 @@ def page_livreurs():
         montant = tarif * nb
         st.info(f"💵 Montant total : {montant:,} FCFA")
 
+        # Commandes à livrer pour cette zone
+        df_cmd_liv = load("Commandes")
+        col_liv_l = "Statut_Livraison" if "Statut_Livraison" in df_cmd_liv.columns else None
+        cmds_a_livrer = []
+        if col_liv_l and not df_cmd_liv.empty:
+            mask_l = df_cmd_liv[col_liv_l].isin(["À préparer", "Préparée"])
+            cmds_a_livrer = df_cmd_liv[mask_l]["ID"].dropna().unique().tolist()
+
+        cmds_selectionnees = st.multiselect(
+            "📦 Commandes livrées lors de cette course",
+            options=cmds_a_livrer,
+            help="Ces commandes seront marquées 'Livrée' automatiquement"
+        )
+
         if st.form_submit_button("✅ Enregistrer", use_container_width=True, type="primary"):
             if livreur.strip():
                 append("Livreurs", [
@@ -824,8 +893,21 @@ def page_livreurs():
                     date.today().strftime("%d/%m/%Y"),
                     zone_l, tarif, nb, montant,
                 ])
+                # Marquer les commandes sélectionnées comme Livrée
+                if cmds_selectionnees and col_liv_l:
+                    df_full = load("Commandes")
+                    ws_cmd  = _ws("Commandes")
+                    col_idx = list(df_full.columns).index(col_liv_l) + 1
+                    for cmd_id in cmds_selectionnees:
+                        rows_idx = df_full.index[df_full["ID"] == cmd_id].tolist()
+                        for ridx in rows_idx:
+                            ws_cmd.update_cell(ridx + 2, col_idx, "Livrée")
+                            _decrement_stock(df_full.loc[ridx])
+                            _decrement_sachet(df_full.loc[ridx])
                 bust()
-                st.success("✅ Course enregistrée !")
+                nb_liv = len(cmds_selectionnees)
+                st.success(f"✅ Course enregistrée !"
+                           + (f" {nb_liv} commande(s) marquée(s) Livrée." if nb_liv else ""))
                 st.rerun()
             else:
                 st.error("Le nom du livreur est obligatoire.")
