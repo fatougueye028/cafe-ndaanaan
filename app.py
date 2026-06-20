@@ -628,36 +628,44 @@ def page_orders():
     with c3:
         new_comm = st.text_input("Commentaire", value=str(row.get("Commentaire", "") or ""))
 
+    # Afficher toutes les lignes de cette commande
+    toutes_lignes = df_full[df_full["ID"] == sel_id]
+    nb_lignes = len(toutes_lignes)
+    if nb_lignes > 1:
+        st.info(f"ℹ️ Cette commande a **{nb_lignes} produits** — toutes les lignes seront mises à jour.")
+
     if st.button("💾 Sauvegarder", use_container_width=True, type="primary"):
-        ws = _ws("Commandes")
-        col_l = list(df_full.columns).index("Statut_Livraison") + 1
-        col_p = list(df_full.columns).index("Statut_Paiement") + 1
-        col_c = list(df_full.columns).index("Commentaire") + 1
-        sheet_row = row_idx + 2
-        ws.update_cell(sheet_row, col_l, new_liv)
-        ws.update_cell(sheet_row, col_p, new_pay)
-        ws.update_cell(sheet_row, col_c, new_comm)
+        ws         = _ws("Commandes")
+        cols       = list(df_full.columns)
+        col_l      = cols.index("Statut_Livraison") + 1 if "Statut_Livraison" in cols else None
+        col_p      = cols.index("Statut_Paiement")  + 1 if "Statut_Paiement"  in cols else None
+        col_c      = cols.index("Commentaire")       + 1 if "Commentaire"       in cols else None
+        col_td     = cols.index("Type_Demande")      + 1 if "Type_Demande"      in cols else None
 
-        statut_col_local = "Type_Demande" if "Type_Demande" in df_full.columns else "Statut_Livraison"
-        ancien_statut = row.get(statut_col_local, "")
+        statut_col_local = "Type_Demande" if "Type_Demande" in cols else "Statut_Livraison"
+        est_cloture = new_liv == "Livrée" and new_pay == "Payé"
 
-        # Décrémenter stock café : Préparée ou Livrée
-        if new_liv in TYPES_STOCK and ancien_statut not in TYPES_STOCK:
-            _decrement_stock(row)
+        # Mettre à jour TOUTES les lignes du même CMD ID
+        all_idx = df_full.index[df_full["ID"] == sel_id].tolist()
+        for ridx in all_idx:
+            sheet_row = ridx + 2
+            ancien_statut = df_full.loc[ridx, statut_col_local] if statut_col_local in cols else ""
 
-        # Décrémenter sachets : uniquement à la Préparation
-        if new_liv in TYPES_SACHET and ancien_statut not in TYPES_SACHET:
-            _decrement_sachet(row)
+            if col_l: ws.update_cell(sheet_row, col_l, new_liv)
+            if col_p: ws.update_cell(sheet_row, col_p, new_pay)
+            if col_c and new_comm: ws.update_cell(sheet_row, col_c, new_comm)
+            if col_td and est_cloture: ws.update_cell(sheet_row, col_td, "Clôturée")
 
-        # Auto-clôturer si Livrée + Payé
-        if new_liv == "Livrée" and new_pay == "Payé":
-            if "Type_Demande" in df_full.columns:
-                col_td = list(df_full.columns).index("Type_Demande") + 1
-                ws.update_cell(sheet_row, col_td, "Clôturée")
+            row_data = df_full.loc[ridx]
+            if new_liv in TYPES_STOCK and str(ancien_statut) not in TYPES_STOCK:
+                _decrement_stock(row_data)
+            if new_liv in TYPES_SACHET and str(ancien_statut) not in TYPES_SACHET:
+                _decrement_sachet(row_data)
 
         bust()
-        st.success(f"✅ Commande {sel_id} mise à jour !"
-                   + (" — 🎯 Clôturée automatiquement" if new_liv == "Livrée" and new_pay == "Payé" else ""))
+        msg = f"✅ Commande {sel_id} — {nb_lignes} ligne(s) mise(s) à jour"
+        msg += " — 🎯 Clôturée automatiquement" if est_cloture else ""
+        st.success(msg)
         st.rerun()
 
 def _update_stock_row(df_s, idx, qty_delta_vend=0, qty_delta_prod=0, qty_delta_cmd=0):
