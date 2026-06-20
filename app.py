@@ -745,9 +745,75 @@ def _decrement_sachet(row):
     except Exception as e:
         st.warning(f"⚠️ Stock sachets non décrémenté : {e}")
 
+def _recalculer_stock():
+    """Recalcule Unites_Commandees, Unites_Vendues et Stock_Restant
+    depuis les Commandes, en respectant le Lot/Gamme/Format."""
+    try:
+        df_s   = load("Stock")
+        df_cmd = load("Commandes")
+        if df_s.empty or df_cmd.empty:
+            return 0
+
+        df_cmd["Quantité"] = pd.to_numeric(df_cmd["Quantité"], errors="coerce").fillna(0)
+        col_liv = "Statut_Livraison" if "Statut_Livraison" in df_cmd.columns else "Type_Demande"
+
+        STATUTS_CMD  = ["Commande confirmée", "À préparer", "Préparée"]
+        STATUTS_VEND = ["Livrée", "Clôturée"]
+
+        ws_s  = _ws("Stock")
+        cols  = list(df_s.columns)
+        today = date.today().strftime("%d/%m/%Y")
+        updated = 0
+
+        for idx, stock_row in df_s.iterrows():
+            lot   = str(stock_row.get("Lot",   "")).strip()
+            gamme = str(stock_row.get("Gamme", "")).strip()
+            fmt   = str(stock_row.get("Format","")).strip()
+
+            # Filtrer les commandes correspondantes
+            mask_base = (df_cmd["Gamme"] == gamme) & (df_cmd["Format"] == fmt)
+            if lot:
+                mask_base = mask_base & (df_cmd["Lot"] == lot)
+
+            df_lot = df_cmd[mask_base]
+
+            # Unités commandées (confirmées/en cours)
+            nb_cmd  = int(df_lot[df_lot[col_liv].isin(STATUTS_CMD)]["Quantité"].sum())
+            # Unités vendues (livrées/clôturées)
+            nb_vend = int(df_lot[df_lot[col_liv].isin(STATUTS_VEND)]["Quantité"].sum())
+
+            prod    = int(pd.to_numeric(stock_row.get("Unites_Produites", 0), errors="coerce") or 0)
+            restant = max(0, prod - nb_vend)
+
+            sheet_row = idx + 2
+            if "Unites_Commandees" in cols:
+                ws_s.update_cell(sheet_row, cols.index("Unites_Commandees") + 1, nb_cmd)
+            if "Unites_Vendues" in cols:
+                ws_s.update_cell(sheet_row, cols.index("Unites_Vendues")    + 1, nb_vend)
+            if "Stock_Restant" in cols:
+                ws_s.update_cell(sheet_row, cols.index("Stock_Restant")     + 1, restant)
+            updated += 1
+
+        bust()
+        return updated
+    except Exception as e:
+        st.error(f"Erreur recalcul stock : {e}")
+        return 0
+
 # ─── Page : Stock ──────────────────────────────────────────────
 def page_stock():
     st.title("📦 Suivi des Stocks")
+
+    # ── Bouton de recalcul ───────────────────────────────────────
+    col_btn, col_info = st.columns([2, 4])
+    with col_btn:
+        if st.button("🔄 Recalculer depuis les Commandes", type="primary", use_container_width=True):
+            with st.spinner("Calcul en cours..."):
+                n = _recalculer_stock()
+            st.success(f"✅ {n} lignes recalculées — Commandées, Vendues et Restant sont à jour.")
+            st.rerun()
+    with col_info:
+        st.caption("Synchronise automatiquement Unités Commandées, Vendues et Stock Restant depuis la feuille Commandes.")
 
     df_s = load("Stock")
 
