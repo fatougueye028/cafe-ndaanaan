@@ -303,13 +303,33 @@ def page_dashboard():
 
     st.title("🏠 Tableau de Bord")
 
-    # Grille 4 gammes
-    if gammes_b64:
-        with st.expander("☕ Nos gammes — Signature · Original · Prestige · Épicé", expanded=False):
+    # Galerie gammes
+    with st.expander("☕ Nos gammes — Signature · Original · Prestige · Épicé", expanded=False):
+        gammes_b64 = _load_image_b64("gammes.png")
+        if gammes_b64:
             st.markdown(
-                f'<img src="data:image/png;base64,{gammes_b64}" style="width:100%;border-radius:10px"/>',
+                f'<img src="data:image/png;base64,{gammes_b64}" style="width:100%;border-radius:10px;margin-bottom:12px"/>',
                 unsafe_allow_html=True,
             )
+        # Photos individuelles par gamme
+        col_imgs = st.columns(4)
+        img_data = [
+            ("sachet_blanc.png", "png", "Signature", "#F5F5F5"),
+            ("sachet_dore.png",  "png", "Original",  "#C17A3A"),
+            ("sachet_noir.png",  "png", "Prestige",   "#2C1008"),
+            ("sachet_rouge.png", "png", "Épicé",      "#8B1A1A"),
+        ]
+        for col, (fname, ext, label, color) in zip(col_imgs, img_data):
+            b64 = _load_image_b64(fname)
+            with col:
+                if b64:
+                    st.markdown(
+                        f'<div style="border-radius:10px;overflow:hidden;border:2px solid {color}33">'
+                        f'<img src="data:image/{ext};base64,{b64}" style="width:100%;"/>'
+                        f'</div>'
+                        f'<p style="text-align:center;font-weight:600;color:{color};margin-top:6px;font-size:0.85rem">{label}</p>',
+                        unsafe_allow_html=True,
+                    )
 
     df = load("Commandes")
     df_stock = load("Stock")
