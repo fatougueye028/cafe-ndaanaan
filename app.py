@@ -20,25 +20,84 @@ st.set_page_config(
 # ─── CSS ───────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
-    section[data-testid="stSidebar"] { background-color: #3d1a00; }
-    section[data-testid="stSidebar"] * { color: #f5e6d0 !important; }
-    section[data-testid="stSidebar"] hr { border-color: #7a3d00; }
-    .kpi-box {
-        background: #fff8f0;
-        border: 1px solid #e8c99a;
-        border-left: 5px solid #8B4513;
-        border-radius: 8px;
-        padding: 14px 18px;
-        margin-bottom: 6px;
-        text-align: center;
+    /* ── Polices & fond ── */
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    .block-container { padding-top: 1.2rem; padding-bottom: 2rem; max-width: 1100px; }
+
+    /* ── Sidebar ── */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #2C1008 0%, #4A1E0A 60%, #6B3015 100%);
+        border-right: 2px solid #C17A3A;
     }
-    .kpi-box .val { font-size: 1.7rem; font-weight: 700; color: #8B4513; }
-    .kpi-box .lbl { font-size: 0.78rem; color: #777; margin-top: 2px; }
-    .alert-rouge { background:#fde8e8; border-left:4px solid #e53e3e;
-                   border-radius:6px; padding:10px 14px; margin-bottom:8px; }
-    .alert-orange { background:#fff3cd; border-left:4px solid #f6993f;
-                    border-radius:6px; padding:10px 14px; margin-bottom:8px; }
+    section[data-testid="stSidebar"] * { color: #F5E6D0 !important; }
+    section[data-testid="stSidebar"] hr { border-color: #C17A3A55; }
+    section[data-testid="stSidebar"] .stRadio label {
+        padding: 6px 12px;
+        border-radius: 6px;
+        transition: background 0.2s;
+    }
+    section[data-testid="stSidebar"] .stRadio label:hover {
+        background: #C17A3A33;
+    }
+
+    /* ── Titres ── */
+    h1, h2, h3 {
+        font-family: 'Playfair Display', serif !important;
+        color: #2C1008 !important;
+    }
+    h1 { border-bottom: 2px solid #C17A3A; padding-bottom: 8px; }
+
+    /* ── KPI cards ── */
+    .kpi-box {
+        background: linear-gradient(135deg, #FFF8F0 0%, #FFF0DC 100%);
+        border: 1px solid #E8C99A;
+        border-left: 5px solid #C17A3A;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 8px;
+        text-align: center;
+        box-shadow: 0 2px 8px #C17A3A22;
+        transition: transform 0.2s;
+    }
+    .kpi-box:hover { transform: translateY(-2px); }
+    .kpi-box .val { font-size: 1.8rem; font-weight: 700; color: #4A1E0A; font-family: 'Playfair Display', serif; }
+    .kpi-box .lbl { font-size: 0.78rem; color: #8B6B55; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ── Alertes ── */
+    .alert-rouge { background:#FDE8E8; border-left:4px solid #C0392B;
+                   border-radius:8px; padding:12px 16px; margin-bottom:8px; }
+    .alert-orange { background:#FFF8EC; border-left:4px solid #C17A3A;
+                    border-radius:8px; padding:12px 16px; margin-bottom:8px; }
+
+    /* ── Boutons ── */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #4A1E0A, #6B3015) !important;
+        color: #F5E6D0 !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.3px !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #6B3015, #C17A3A) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px #C17A3A44 !important;
+    }
+
+    /* ── Tableaux ── */
+    .stDataFrame { border-radius: 10px !important; overflow: hidden; }
+
+    /* ── Formulaires ── */
+    div[data-testid="stForm"] {
+        border: 1px solid #E8C99A;
+        border-radius: 12px;
+        padding: 20px;
+        background: #FFFBF7;
+    }
+
+    /* ── Mobile ── */
     @media(max-width:640px){ .block-container{padding:0.5rem 0.4rem;} }
 </style>
 """, unsafe_allow_html=True)
@@ -183,12 +242,29 @@ PAGES = {
 }
 
 def sidebar_nav() -> str:
-    st.sidebar.markdown(
-        "<h2 style='text-align:center;font-size:1.4rem;margin-bottom:0'>☕ Kafe Ndaanaan</h2>"
-        "<p style='text-align:center;font-size:0.75rem;opacity:0.7;margin-top:2px'>Gestion & Pilotage</p>",
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown("---")
+    import os, base64
+
+    # Afficher le logo s'il existe dans assets/
+    logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+        st.sidebar.markdown(
+            f'<div style="text-align:center;padding:16px 8px 0">'
+            f'<img src="data:image/png;base64,{logo_b64}" style="width:140px;border-radius:12px;"/>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.sidebar.markdown(
+            "<div style='text-align:center;padding:20px 8px 0'>"
+            "<div style='font-family:Playfair Display,serif;font-size:1.5rem;font-weight:700;color:#F5E6D0'>☕ Kafe</div>"
+            "<div style='font-family:Playfair Display,serif;font-size:1.3rem;color:#C17A3A;letter-spacing:2px'>Ndaanaan</div>"
+            "<div style='font-size:0.7rem;color:#F5E6D055;margin-top:4px'>Café Touba Artisanal</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    st.sidebar.markdown("<hr style='margin:12px 0;border-color:#C17A3A55'/>", unsafe_allow_html=True)
     choice = PAGES[st.sidebar.radio("", list(PAGES.keys()), label_visibility="collapsed")]
     st.sidebar.markdown("---")
     if st.sidebar.button("🔄 Rafraîchir les données", use_container_width=True):
@@ -204,7 +280,25 @@ def kpi(val: str, label: str):
     )
 
 # ─── Page : Dashboard ──────────────────────────────────────────
+def _load_image_b64(filename: str) -> str:
+    import os, base64
+    path = os.path.join(os.path.dirname(__file__), "assets", filename)
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return ""
+
 def page_dashboard():
+    # ── Header brandé ───────────────────────────────────────────
+    banner_b64 = _load_image_b64("banner.jpg")
+    if banner_b64:
+        st.markdown(
+            f'<div style="border-radius:14px;overflow:hidden;margin-bottom:20px;box-shadow:0 4px 20px #2C100833">'
+            f'<img src="data:image/jpeg;base64,{banner_b64}" style="width:100%;max-height:220px;object-fit:cover;object-position:center"/>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     st.title("🏠 Tableau de Bord")
 
     df = load("Commandes")
@@ -1250,6 +1344,18 @@ def _increment_stock(gamme: str, fmt: str, qty: int):
 # ─── Page : Sachets & Affiches ─────────────────────────────────
 def page_sachets():
     st.title("🎨 Sachets & Affiches")
+
+    # Aperçu sachets
+    sachets_b64 = _load_image_b64("sachets.jpg")
+    if sachets_b64:
+        col1, col2, col3 = st.columns([1,3,1])
+        with col2:
+            st.markdown(
+                f'<div style="border-radius:12px;overflow:hidden;margin-bottom:16px;box-shadow:0 3px 15px #2C100822">'
+                f'<img src="data:image/jpeg;base64,{sachets_b64}" style="width:100%;"/>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     COULEURS = ["Blanc", "Noir", "Doré", "Doré vif", "Argenté", "Autre"]
 
