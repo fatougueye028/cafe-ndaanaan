@@ -291,15 +291,25 @@ def _load_image_b64(filename: str) -> str:
 def page_dashboard():
     # ── Header brandé ───────────────────────────────────────────
     banner_b64 = _load_image_b64("banner.jpg")
+    gammes_b64 = _load_image_b64("gammes.png")
+
     if banner_b64:
         st.markdown(
-            f'<div style="border-radius:14px;overflow:hidden;margin-bottom:20px;box-shadow:0 4px 20px #2C100833">'
-            f'<img src="data:image/jpeg;base64,{banner_b64}" style="width:100%;max-height:220px;object-fit:cover;object-position:center"/>'
+            f'<div style="border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 4px 20px #2C100833">'
+            f'<img src="data:image/jpeg;base64,{banner_b64}" style="width:100%;max-height:200px;object-fit:cover;object-position:center top"/>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
     st.title("🏠 Tableau de Bord")
+
+    # Grille 4 gammes
+    if gammes_b64:
+        with st.expander("☕ Nos gammes — Signature · Original · Prestige · Épicé", expanded=False):
+            st.markdown(
+                f'<img src="data:image/png;base64,{gammes_b64}" style="width:100%;border-radius:10px"/>',
+                unsafe_allow_html=True,
+            )
 
     df = load("Commandes")
     df_stock = load("Stock")
