@@ -517,7 +517,7 @@ def page_new_order():
         with s3:
             lot_prevu = st.text_input("Lot", placeholder="Lot 4, Lot Magal…")
         with s4:
-            offert = st.checkbox("🎁 Offre commerciale")
+            st.caption("")  # espace réservé
 
         # Raccourci : Achat immédiat
         achat_immediat = (statut_liv_form == "Livrée" and statut_pay_form == "Payé")
@@ -529,7 +529,7 @@ def page_new_order():
         devise = "EUR" if zone == "France" else ("CAD" if zone == "Canada" else "FCFA")
 
         for i, prod in enumerate(st.session_state.produits):
-            p1, p2, p3, p4 = st.columns(4)
+            p1, p2, p3, p4, p5 = st.columns([2, 1.5, 1, 2, 1.5])
             with p1:
                 g = st.selectbox("Gamme", GAMMES,
                     index=GAMMES.index(prod["gamme"]) if prod["gamme"] in GAMMES else 0,
@@ -539,11 +539,14 @@ def page_new_order():
                     index=FORMATS.index(prod["fmt"]) if prod["fmt"] in FORMATS else 1,
                     key=f"fmt_{i}")
             with p3:
-                q = st.number_input("Quantité", min_value=1, value=prod["qty"], key=f"qty_{i}")
+                q = st.number_input("Qté", min_value=1, value=prod["qty"], key=f"qty_{i}")
             with p4:
                 prix_d = PRIX_EUR.get((g, f), 0) if devise == "EUR" else PRIX_FCFA.get((g, f), 0)
                 p = st.number_input(f"Prix ({devise})", value=float(prix_d), min_value=0.0, step=0.5, key=f"prix_{i}")
-            st.session_state.produits[i] = {"gamme": g, "fmt": f, "qty": q, "prix": p}
+            with p5:
+                st.markdown("<br>", unsafe_allow_html=True)
+                offert_i = st.checkbox("🎁 Offre", value=prod.get("offert", False), key=f"offert_{i}")
+            st.session_state.produits[i] = {"gamme": g, "fmt": f, "qty": q, "prix": p, "offert": offert_i}
 
         ca_total = sum(round(p["prix"] * p["qty"], 2) for p in st.session_state.produits)
         est_reel = type_dem in TYPES_CA_REEL
@@ -598,7 +601,7 @@ def page_new_order():
                     "Statut_Livraison":  statut_liv,
                     "Statut_Paiement":   statut_pay_form,
                     "Lot":               lot_prevu,
-                    "Offre_Commerciale": offre_val,
+                    "Offre_Commerciale": "Offre commerciale" if prod.get("offert") else "",
                     "Date_Prevue":       date_prevue,
                     "Commentaire":       comm,
                 })
