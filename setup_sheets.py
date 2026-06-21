@@ -67,7 +67,7 @@ SHEETS = {
         "ID", "Nom", "Responsable", "Localisation", "Notes",
     ],
     "Stock_Depots": [
-        "Depot", "Gamme", "Format", "Stock_Restant", "Derniere_MAJ",
+        "Depot", "Lot", "Gamme", "Format", "Stock_Restant", "Derniere_MAJ",
     ],
     "Mouvements_Stock": [
         "Date", "ID_Mouvement", "Depot_Origine", "Depot_Destination",

@@ -1557,7 +1557,7 @@ def page_depots():
                                 return "background:#eafaf1;color:#27ae60"
                             except: return ""
 
-                        COLS_D = ["Gamme", "Format", "Stock_Restant", "Derniere_MAJ"]
+                        COLS_D = ["Lot", "Gamme", "Format", "Stock_Restant", "Derniere_MAJ"]
                         COLS_D = [c for c in COLS_D if c in df_d.columns]
                         rest_col = [c for c in ["Stock_Restant"] if c in COLS_D]
                         styled = df_d[COLS_D].style.map(style_s, subset=rest_col) if rest_col else df_d[COLS_D]
