@@ -148,6 +148,10 @@ ID_PREFIXES     = {
 DATES_PREVUES   = ["Aujourd'hui", "Cette semaine", "Ce mois",
                    "Magal Touba", "Dans 1 mois", "Dans 2 mois", "À définir"]
 
+# ── Dépôts ─────────────────────────────────────────────────────
+DEPOTS_DEFAUT = ["Dakar", "Touba", "France", "Partenaire France"]
+DEPOT_REFERENCE = "Dakar"  # Stock officiel de référence
+
 # Rétrocompatibilité (ancien champ Statut_Livraison)
 STATUTS_LIV = ["À préparer", "Préparée", "Livrée", "Annulée"]
 
@@ -236,6 +240,7 @@ PAGES = {
     "➕ Nouvelle commande":  "new_order",
     "📋 Commandes":         "orders",
     "📦 Stock":             "stock",
+    "🏪 Dépôts":            "depots",
     "🏭 Production":        "production",
     "🎨 Sachets & Affiches": "sachets",
     "🚚 Livraisons":        "livreurs",
@@ -375,6 +380,19 @@ def page_dashboard():
             f'<div class="alert-orange">📋 <b>{nb_prev} prospect(s)/précommande(s)</b> en attente de confirmation</div>',
             unsafe_allow_html=True,
         )
+
+    # ── Stock par dépôt ─────────────────────────────────────────
+    df_sd = load("Stock_Depots")
+    if not df_sd.empty:
+        st.markdown("---")
+        st.subheader("🏪 Stock par dépôt")
+        df_sd["Stock_Restant"] = pd.to_numeric(df_sd["Stock_Restant"], errors="coerce").fillna(0).astype(int)
+        resume_depots = df_sd.groupby("Depot")["Stock_Restant"].sum().reset_index()
+        cols_dep = st.columns(len(resume_depots))
+        for i, (_, row_d) in enumerate(resume_depots.iterrows()):
+            with cols_dep[i]:
+                badge = "🟢" if row_d["Stock_Restant"] > 20 else ("🟡" if row_d["Stock_Restant"] > 5 else "🔴")
+                kpi(f"{badge} {row_d['Stock_Restant']}", row_d["Depot"])
 
     st.markdown("---")
 
@@ -1490,6 +1508,244 @@ def page_sachets():
                 bust(); st.success("✅ Enregistré !"); st.rerun()
 
 
+# ─── Page : Dépôts ─────────────────────────────────────────────
+def page_depots():
+    st.title("🏪 Gestion des Dépôts")
+
+    df_depots  = load("Depots")
+    df_stocks  = load("Stock_Depots")
+    df_mvts    = load("Mouvements_Stock")
+    df_cmd     = load("Commandes")
+
+    # Récupérer la liste des dépôts disponibles
+    depots_list = df_depots["Nom"].dropna().tolist() if not df_depots.empty else DEPOTS_DEFAUT
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Stock par dépôt",
+        "🔄 Nouveau transfert",
+        "📋 Historique transferts",
+        "⚙️ Gérer les dépôts",
+    ])
+
+    # ── Tab 1 : Stock par dépôt ─────────────────────────────────
+    with tab1:
+        if df_stocks.empty:
+            st.info("Aucun stock par dépôt. Lance setup_sheets.py puis initialise le stock.")
+        else:
+            df_stocks["Stock_Restant"] = pd.to_numeric(df_stocks["Stock_Restant"], errors="coerce").fillna(0).astype(int)
+
+            # KPIs globaux
+            total_global = df_stocks["Stock_Restant"].sum()
+            st.markdown(f'<div class="kpi-box"><div class="val">{total_global}</div><div class="lbl">Stock global (toutes gammes, tous dépôts)</div></div>', unsafe_allow_html=True)
+            st.markdown("---")
+
+            # Stock par dépôt
+            for depot in depots_list:
+                df_d = df_stocks[df_stocks["Depot"] == depot].copy()
+                total_depot = int(df_d["Stock_Restant"].sum())
+                badge = "🟢" if total_depot > 20 else ("🟡" if total_depot > 5 else "🔴")
+
+                with st.expander(f"{badge} **{depot}** — {total_depot} unités", expanded=(depot == DEPOT_REFERENCE)):
+                    if df_d.empty:
+                        st.caption("Aucun stock renseigné pour ce dépôt.")
+                    else:
+                        def style_s(val):
+                            try:
+                                v = int(val)
+                                if v <= 0:  return "background:#fde8e8;color:#c0392b;font-weight:bold"
+                                if v <= 5:  return "background:#fff3cd;color:#e67e22;font-weight:bold"
+                                return "background:#eafaf1;color:#27ae60"
+                            except: return ""
+
+                        COLS_D = ["Gamme", "Format", "Stock_Restant", "Derniere_MAJ"]
+                        COLS_D = [c for c in COLS_D if c in df_d.columns]
+                        rest_col = [c for c in ["Stock_Restant"] if c in COLS_D]
+                        styled = df_d[COLS_D].style.map(style_s, subset=rest_col) if rest_col else df_d[COLS_D]
+                        st.dataframe(styled, use_container_width=True, hide_index=True,
+                            column_config={"Stock_Restant": st.column_config.NumberColumn("Stock")})
+
+            # Graphique comparatif
+            if not df_stocks.empty and "Depot" in df_stocks.columns:
+                resume = df_stocks.groupby("Depot")["Stock_Restant"].sum().reset_index()
+                fig = px.bar(resume, x="Depot", y="Stock_Restant",
+                             title="Stock total par dépôt", color="Depot",
+                             color_discrete_sequence=["#C17A3A","#4A1E0A","#27AE60","#2980B9"])
+                fig.update_layout(showlegend=False, height=280, margin=dict(t=40,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+
+    # ── Tab 2 : Nouveau transfert ───────────────────────────────
+    with tab2:
+        st.subheader("📦 Créer un transfert entre dépôts")
+
+        # Initialiser les produits du transfert
+        if "transfert_produits" not in st.session_state:
+            st.session_state.transfert_produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1}]
+
+        with st.form("form_transfert_depots", clear_on_submit=False):
+            t1, t2, t3 = st.columns(3)
+            with t1:
+                date_t = st.date_input("Date", value=date.today())
+            with t2:
+                origine  = st.selectbox("Dépôt origine *", depots_list)
+            with t3:
+                dest     = st.selectbox("Dépôt destination *",
+                    [d for d in depots_list if d != origine] if len(depots_list) > 1 else depots_list)
+
+            st.markdown("**Produits à transférer**")
+            for i, prod in enumerate(st.session_state.transfert_produits):
+                p1, p2, p3 = st.columns(3)
+                with p1:
+                    g = st.selectbox("Gamme", GAMMES,
+                        index=GAMMES.index(prod["gamme"]) if prod["gamme"] in GAMMES else 0,
+                        key=f"tg_{i}")
+                with p2:
+                    f = st.selectbox("Format", FORMATS,
+                        index=FORMATS.index(prod["fmt"]) if prod["fmt"] in FORMATS else 1,
+                        key=f"tf_{i}")
+                with p3:
+                    q = st.number_input("Quantité", min_value=1, value=prod["qty"], key=f"tq_{i}")
+                st.session_state.transfert_produits[i] = {"gamme": g, "fmt": f, "qty": q}
+
+            comm_t = st.text_input("Commentaire (optionnel)")
+            submitted_t = st.form_submit_button("✅ Valider le transfert", use_container_width=True, type="primary")
+
+        c_add, c_del = st.columns(2)
+        with c_add:
+            if st.button("➕ Ajouter un produit", use_container_width=True, key="add_t"):
+                st.session_state.transfert_produits.append({"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1})
+                st.rerun()
+        with c_del:
+            if len(st.session_state.transfert_produits) > 1:
+                if st.button("➖ Supprimer le dernier", use_container_width=True, key="del_t"):
+                    st.session_state.transfert_produits.pop()
+                    st.rerun()
+
+        if submitted_t:
+            if origine == dest:
+                st.error("Origine et destination identiques.")
+            else:
+                # Générer un ID de mouvement
+                nb_mvt = len(df_mvts) + 1 if not df_mvts.empty else 1
+                id_mvt = f"MVT-{date.today().year}-{nb_mvt:03d}"
+
+                df_stocks_full = load("Stock_Depots")
+                ws_sd = _ws("Stock_Depots")
+                cols_sd = ws_sd.row_values(1)
+
+                for prod in st.session_state.transfert_produits:
+                    # Enregistrer le mouvement
+                    append_dict("Mouvements_Stock", {
+                        "Date":             date_t.strftime("%d/%m/%Y"),
+                        "ID_Mouvement":     id_mvt,
+                        "Depot_Origine":    origine,
+                        "Depot_Destination": dest,
+                        "Gamme":            prod["gamme"],
+                        "Format":           prod["fmt"],
+                        "Quantite":         prod["qty"],
+                        "Statut":           "Validé",
+                        "Commentaire":      comm_t,
+                    })
+
+                    # Décrémenter le dépôt origine
+                    if not df_stocks_full.empty:
+                        m_src = (
+                            (df_stocks_full["Depot"]  == origine) &
+                            (df_stocks_full["Gamme"]  == prod["gamme"]) &
+                            (df_stocks_full["Format"] == prod["fmt"])
+                        )
+                        m_dst = (
+                            (df_stocks_full["Depot"]  == dest) &
+                            (df_stocks_full["Gamme"]  == prod["gamme"]) &
+                            (df_stocks_full["Format"] == prod["fmt"])
+                        )
+
+                        def _update_depot(mask, delta):
+                            if mask.any():
+                                idx = df_stocks_full.index[mask][0]
+                                current = int(pd.to_numeric(df_stocks_full.loc[idx, "Stock_Restant"], errors="coerce") or 0)
+                                new_val = max(0, current + delta)
+                                col_r = cols_sd.index("Stock_Restant") + 1
+                                col_m = cols_sd.index("Derniere_MAJ") + 1
+                                ws_sd.update_cell(idx + 2, col_r, new_val)
+                                ws_sd.update_cell(idx + 2, col_m, date.today().strftime("%d/%m/%Y"))
+                            else:
+                                # Créer la ligne si elle n'existe pas (pour destination)
+                                if delta > 0:
+                                    append_dict("Stock_Depots", {
+                                        "Depot": dest, "Gamme": prod["gamme"],
+                                        "Format": prod["fmt"], "Stock_Restant": delta,
+                                        "Derniere_MAJ": date.today().strftime("%d/%m/%Y")
+                                    })
+
+                        _update_depot(m_src, -prod["qty"])
+                        _update_depot(m_dst,  prod["qty"])
+
+                bust()
+                st.session_state.transfert_produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1}]
+                nb = len(st.session_state.get("transfert_produits", [{}]))
+                st.success(f"✅ Transfert {id_mvt} validé — {origine} → {dest}")
+                st.rerun()
+
+    # ── Tab 3 : Historique transferts ───────────────────────────
+    with tab3:
+        st.subheader("📋 Historique des transferts")
+        if df_mvts.empty:
+            st.info("Aucun transfert enregistré.")
+        else:
+            df_mvts["Quantite"] = pd.to_numeric(df_mvts["Quantite"], errors="coerce").fillna(0).astype(int)
+
+            # Filtres
+            f1, f2 = st.columns(2)
+            with f1:
+                dep_f = st.multiselect("Dépôt", depots_list, default=depots_list, key="dep_f")
+            with f2:
+                gam_f = st.multiselect("Gamme", GAMMES, default=GAMMES, key="gam_f_t")
+
+            mask_m = (
+                (df_mvts["Depot_Origine"].isin(dep_f) | df_mvts["Depot_Destination"].isin(dep_f)) &
+                df_mvts["Gamme"].isin(gam_f)
+            )
+            st.dataframe(df_mvts[mask_m], use_container_width=True, hide_index=True,
+                column_config={
+                    "Quantite": st.column_config.NumberColumn("Qté"),
+                    "ID_Mouvement": st.column_config.TextColumn("N° Transfert"),
+                })
+
+    # ── Tab 4 : Gérer les dépôts ────────────────────────────────
+    with tab4:
+        st.subheader("⚙️ Dépôts enregistrés")
+
+        if not df_depots.empty:
+            st.dataframe(df_depots, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.subheader("➕ Ajouter un dépôt")
+        with st.form("form_depot", clear_on_submit=True):
+            d1, d2 = st.columns(2)
+            with d1:
+                nom_d   = st.text_input("Nom du dépôt *", placeholder="Saint-Louis, Espagne…")
+                resp_d  = st.text_input("Responsable", placeholder="Nom du responsable")
+            with d2:
+                loc_d   = st.text_input("Localisation", placeholder="Ville, Pays")
+                notes_d = st.text_input("Notes")
+
+            if st.form_submit_button("💾 Enregistrer", use_container_width=True, type="primary"):
+                if nom_d.strip():
+                    nb_dep = len(df_depots) + 1 if not df_depots.empty else 1
+                    append_dict("Depots", {
+                        "ID":            f"DEP-{nb_dep:03d}",
+                        "Nom":           nom_d.strip(),
+                        "Responsable":   resp_d,
+                        "Localisation":  loc_d,
+                        "Notes":         notes_d,
+                    })
+                    bust()
+                    st.success(f"✅ Dépôt '{nom_d}' ajouté !")
+                    st.rerun()
+                else:
+                    st.error("Le nom est obligatoire.")
+
+
 # ─── Main ──────────────────────────────────────────────────────
 def main():
     page = sidebar_nav()
@@ -1504,6 +1760,8 @@ def main():
         page_stock()
     elif page == "production":
         page_production()
+    elif page == "depots":
+        page_depots()
     elif page == "sachets":
         page_sachets()
     elif page == "livreurs":

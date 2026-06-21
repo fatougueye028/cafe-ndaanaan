@@ -63,6 +63,16 @@ SHEETS = {
     "Transporteurs": [
         "Nom", "Type", "Zone", "Tarif", "Telephone", "Delai", "Notes",
     ],
+    "Depots": [
+        "ID", "Nom", "Responsable", "Localisation", "Notes",
+    ],
+    "Stock_Depots": [
+        "Depot", "Gamme", "Format", "Stock_Restant", "Derniere_MAJ",
+    ],
+    "Mouvements_Stock": [
+        "Date", "ID_Mouvement", "Depot_Origine", "Depot_Destination",
+        "Gamme", "Format", "Quantite", "Statut", "Commentaire",
+    ],
     "Sachets": [
         "Date", "Gamme", "Couleur", "Format",
         "Qte_Achetee", "Qte_Utilisee", "Stock_Restant", "Notes",
