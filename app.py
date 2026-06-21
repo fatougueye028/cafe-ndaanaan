@@ -504,11 +504,25 @@ def page_new_order():
             zone    = st.selectbox("Zone *", ZONES)
             comm    = st.text_area("Commentaire / Notes", height=70, placeholder="Notes internes, instructions de livraison…")
 
-        l1, l2 = st.columns(2)
-        with l1:
-            lot_prevu = st.text_input("Lot prévu", placeholder="Lot 4, Lot Magal, À définir")
-        with l2:
+        st.subheader("Statut")
+        s1, s2, s3, s4 = st.columns(4)
+        with s1:
+            statut_liv_form = st.selectbox("Livraison", STATUTS_LIV,
+                index=0,
+                help="'Livrée' pour un achat immédiat en boutique")
+        with s2:
+            statut_pay_form = st.selectbox("Paiement", STATUTS_PAY,
+                index=0,
+                help="'Payé' si le client a déjà réglé")
+        with s3:
+            lot_prevu = st.text_input("Lot", placeholder="Lot 4, Lot Magal…")
+        with s4:
             offert = st.checkbox("🎁 Offre commerciale")
+
+        # Raccourci : Achat immédiat
+        achat_immediat = (statut_liv_form == "Livrée" and statut_pay_form == "Payé")
+        if achat_immediat:
+            st.success("🏪 **Achat immédiat** — sera enregistrée comme Livrée + Payée + Clôturée")
 
         # ── Produits ──
         st.subheader("Produits")
@@ -557,8 +571,12 @@ def page_new_order():
             st.error("Le nom du client est obligatoire.")
         else:
             new_id     = next_id(df_cmd, type_dem)
-            statut_liv = {"Livrée": "Livrée", "Préparée": "Préparée",
-                          "Annulée": "Annulée"}.get(type_dem, "À préparer")
+            # Statut_Livraison : priorité au choix du formulaire
+            statut_liv = statut_liv_form
+
+            # Auto-clôturer si Livrée + Payé
+            if achat_immediat and type_dem not in ["Clôturée"]:
+                type_dem = "Clôturée"
             offre_val  = "Offre commerciale" if offert else ""
 
             for prod in st.session_state.produits:
@@ -578,7 +596,7 @@ def page_new_order():
                     "Devise":            devise,
                     "Type_Demande":      type_dem,
                     "Statut_Livraison":  statut_liv,
-                    "Statut_Paiement":   "Non payé",
+                    "Statut_Paiement":   statut_pay_form,
                     "Lot":               lot_prevu,
                     "Offre_Commerciale": offre_val,
                     "Date_Prevue":       date_prevue,
