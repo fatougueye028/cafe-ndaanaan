@@ -1693,31 +1693,34 @@ def page_depots():
 
             df_z = df_cmd_z[df_cmd_z["Lot"].isin(lot_sel)].copy() if lot_sel else df_cmd_z.copy()
 
-            # Grouper par Zone / Gamme / Format
+            # Colonne de localisation (Localisation ou Zone selon version du sheet)
+            loc_col_z = "Localisation" if "Localisation" in df_z.columns else "Dépôt" if "Dépôt" in df_z.columns else "Zone"
+
+            # Grouper par Localisation / Gamme / Format
             df_vend = df_z[df_z[col_liv_z].isin(VENDUS_Z)].groupby(
-                ["Zone", "Gamme", "Format"]
+                [loc_col_z, "Gamme", "Format"]
             ).agg(
                 Unites_Vendues=("Quantité", "sum"),
                 CA_Zone=("CA", "sum")
-            ).reset_index()
+            ).reset_index().rename(columns={loc_col_z: "Zone"})
 
             df_cmd_conf = df_z[df_z[col_liv_z].isin(["Commande confirmée", "À préparer", "Préparée"])].groupby(
-                ["Zone", "Gamme", "Format"]
-            ).agg(Unites_Commandees=("Quantité", "sum")).reset_index()
+                [loc_col_z, "Gamme", "Format"]
+            ).agg(Unites_Commandees=("Quantité", "sum")).reset_index().rename(columns={loc_col_z: "Zone"})
 
             # Stock initial par dépôt (Stock_Depots)
             if not df_sd_z.empty:
                 df_sd_z["Stock_Restant"] = pd.to_numeric(df_sd_z["Stock_Restant"], errors="coerce").fillna(0).astype(int)
                 depot_to_zone = {"Dakar": "Dakar", "Touba": "Touba", "France": "France"}
                 df_sd_z["Zone"] = df_sd_z["Depot"].map(depot_to_zone)
-                stock_init = df_sd_z.groupby(["Zone", "Gamme", "Format"]).agg(
+                stock_init = df_sd_z.groupby(["Zone", "Gamme", "Format"], dropna=False).agg(
                     Stock_Depot=("Stock_Restant", "sum")
                 ).reset_index()
             else:
                 stock_init = pd.DataFrame()
 
             # Afficher par zone
-            zones_dispo_z = sorted(df_z["Zone"].dropna().unique().tolist())
+            zones_dispo_z = sorted(df_z[loc_col_z].dropna().unique().tolist()) if loc_col_z in df_z.columns else []
 
             for zone_n in zones_dispo_z:
                 dv = df_vend[df_vend["Zone"] == zone_n] if not df_vend.empty else pd.DataFrame()
