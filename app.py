@@ -612,7 +612,7 @@ def page_new_order():
                 if statut_liv in TYPES_STOCK:
                     row_data = pd.Series({
                         "Gamme": prod["gamme"], "Format": prod["fmt"],
-                        "Quantité": prod["qty"], "Zone": zone, "ID": new_id
+                        "Quantité": prod["qty"], "Zone": depot_cmd, "ID": new_id
                     })
                     _decrement_stock(row_data)
                     _decrement_depot_stock(prod["gamme"], prod["fmt"], prod["qty"], depot_cmd)
