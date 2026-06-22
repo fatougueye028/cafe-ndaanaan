@@ -529,7 +529,7 @@ def page_new_order():
 
         # ── Produits ──
         st.subheader("Produits")
-        devise = "EUR" if zone == "France" else ("CAD" if zone == "Canada" else "FCFA")
+        devise = "EUR" if depot_cmd == "France" else "FCFA"
 
         for i, prod in enumerate(st.session_state.produits):
             p1, p2, p3, p4, p5 = st.columns([2, 1.5, 1, 2, 1.5])
