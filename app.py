@@ -149,7 +149,7 @@ DATES_PREVUES   = ["Aujourd'hui", "Cette semaine", "Ce mois",
                    "Magal Touba", "Dans 1 mois", "Dans 2 mois", "À définir"]
 
 # ── Dépôts ─────────────────────────────────────────────────────
-DEPOTS_DEFAUT = ["Dakar", "Touba", "France", "Partenaire France"]
+DEPOTS_DEFAUT = ["Dakar", "Touba", "France"]
 DEPOT_REFERENCE = "Dakar"  # Stock officiel de référence
 
 # Rétrocompatibilité (ancien champ Statut_Livraison)

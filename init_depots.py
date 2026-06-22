@@ -33,7 +33,6 @@ DEPOTS = [
     {"ID": "DEP-001", "Nom": "Dakar",            "Responsable": "Fatou Gueye",  "Localisation": "Dakar, Sénégal",  "Notes": "Hub central — stock de référence"},
     {"ID": "DEP-002", "Nom": "Touba",            "Responsable": "",             "Localisation": "Touba, Sénégal",  "Notes": "Production et dépôt Touba"},
     {"ID": "DEP-003", "Nom": "France",           "Responsable": "",             "Localisation": "France",          "Notes": "Dépôt France"},
-    {"ID": "DEP-004", "Nom": "Partenaire France","Responsable": "",             "Localisation": "France",          "Notes": "Dépôt partenaire en France"},
 ]
 
 headers_dep = ws_dep.row_values(1)
@@ -74,7 +73,7 @@ for r in rows_stock:
         })
 
     # Autres dépôts initialisés à 0 (seulement pour le dernier lot)
-    for depot in ["Touba", "France", "Partenaire France"]:
+    for depot in ["Touba", "France"]:
         if (depot, lot, gamme, fmt) not in existing_sd:
             new_sd_rows.append({
                 "Depot": depot, "Lot": lot, "Gamme": gamme, "Format": fmt,
