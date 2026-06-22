@@ -604,11 +604,27 @@ def page_new_order():
                     "Commentaire":       comm,
                 })
 
+                # ── Décrémenter stock à la création si Livrée/Préparée ──
+                if statut_liv in TYPES_STOCK:
+                    row_data = pd.Series({
+                        "Gamme": prod["gamme"], "Format": prod["fmt"],
+                        "Quantité": prod["qty"], "Zone": zone, "ID": new_id
+                    })
+                    _decrement_stock(row_data)
+                    _decrement_depot_stock(prod["gamme"], prod["fmt"], prod["qty"], zone)
+
+                if statut_liv in TYPES_SACHET:
+                    row_data = pd.Series({
+                        "Gamme": prod["gamme"], "Format": prod["fmt"],
+                        "Quantité": prod["qty"]
+                    })
+                    _decrement_sachet(row_data)
+
+            bust()
             st.success(f"✅ {type_dem} **{new_id}** — {len(st.session_state.produits)} produit(s) enregistré(s) !")
             st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0}]
             if est_reel:
                 st.balloons()
-            bust()
 
 # ─── Page : Commandes ──────────────────────────────────────────
 def page_orders():
@@ -820,6 +836,12 @@ def page_orders():
             row_data = df_full.loc[ridx]
             if new_liv in TYPES_STOCK and str(ancien_statut) not in TYPES_STOCK:
                 _decrement_stock(row_data)
+                _decrement_depot_stock(
+                    str(row_data.get("Gamme","")),
+                    str(row_data.get("Format","")),
+                    int(pd.to_numeric(row_data.get("Quantité", 0), errors="coerce") or 0),
+                    str(row_data.get("Zone","Dakar"))
+                )
             if new_liv in TYPES_SACHET and str(ancien_statut) not in TYPES_SACHET:
                 _decrement_sachet(row_data)
 
@@ -873,6 +895,43 @@ def _decrement_stock(row):
         bust()
     except Exception as e:
         st.warning(f"⚠️ Stock café non décrémenté : {e}")
+
+def _decrement_depot_stock(gamme: str, fmt: str, qty: int, zone: str):
+    """Décrémente le stock dans Stock_Depots selon la zone de la commande."""
+    try:
+        # Mapper Zone → Dépôt
+        zone_to_depot = {
+            "Touba": "Touba", "Dakar": "Dakar",
+            "France": "France", "Canada": "France",
+            "Espagne": "France",
+        }
+        depot = zone_to_depot.get(zone, "Dakar")
+
+        df_sd = load("Stock_Depots")
+        if df_sd.empty:
+            return
+
+        mask = (
+            (df_sd["Depot"]  == depot) &
+            (df_sd["Gamme"]  == gamme) &
+            (df_sd["Format"] == fmt)
+        )
+        if not mask.any():
+            return
+
+        idx     = df_sd.index[mask][0]
+        ws_sd   = _ws("Stock_Depots")
+        cols    = list(df_sd.columns)
+        if "Stock_Restant" in cols:
+            current = int(pd.to_numeric(df_sd.loc[idx, "Stock_Restant"], errors="coerce") or 0)
+            col_r   = cols.index("Stock_Restant") + 1
+            col_m   = cols.index("Derniere_MAJ") + 1 if "Derniere_MAJ" in cols else None
+            ws_sd.update_cell(idx + 2, col_r, max(0, current - qty))
+            if col_m:
+                ws_sd.update_cell(idx + 2, col_m, date.today().strftime("%d/%m/%Y"))
+        bust()
+    except Exception as e:
+        st.warning(f"⚠️ Stock dépôt non décrémenté : {e}")
 
 def _decrement_sachet(row):
     """Décrémente le stock sachets quand une commande passe à Préparée."""
