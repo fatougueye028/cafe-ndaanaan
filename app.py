@@ -239,8 +239,8 @@ PAGES = {
     "🏠 Dashboard":         "dashboard",
     "➕ Nouvelle commande":  "new_order",
     "📋 Commandes":         "orders",
-    "📦 Stock":             "stock",
-    "🏪 Dépôts":            "depots",
+    "📦 Stock Production":  "stock",
+    "🏪 Stock Dépôts":      "depots",
     "🏭 Production":        "production",
     "🎨 Sachets & Affiches": "sachets",
     "🚚 Livraisons":        "livreurs",
@@ -965,7 +965,16 @@ def _recalculer_stock():
 
 # ─── Page : Stock ──────────────────────────────────────────────
 def page_stock():
-    st.title("📦 Suivi des Stocks")
+    st.title("📦 Stock de Production")
+
+    st.markdown("""
+    <div style="background:#FFF8EC;border-left:4px solid #C17A3A;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+    <b>Vue Production</b> — Suivi de ce qui a été produit par lot, gamme et format.<br>
+    <span style="font-size:0.85rem;color:#666">
+    Pour voir où se trouve physiquement le café aujourd'hui → <b>🏪 Dépôts</b>
+    </span>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── Bouton de recalcul ───────────────────────────────────────
     col_btn, col_info = st.columns([2, 4])
@@ -973,10 +982,10 @@ def page_stock():
         if st.button("🔄 Recalculer depuis les Commandes", type="primary", use_container_width=True):
             with st.spinner("Calcul en cours..."):
                 n = _recalculer_stock()
-            st.success(f"✅ {n} lignes recalculées — Commandées, Vendues et Restant sont à jour.")
+            st.success(f"✅ {n} lignes recalculées.")
             st.rerun()
     with col_info:
-        st.caption("Synchronise automatiquement Unités Commandées, Vendues et Stock Restant depuis la feuille Commandes.")
+        st.caption("Synchronise Unités Commandées, Vendues et Stock Restant depuis la feuille Commandes.")
 
     df_s = load("Stock")
 
@@ -1531,7 +1540,16 @@ def page_sachets():
 
 # ─── Page : Dépôts ─────────────────────────────────────────────
 def page_depots():
-    st.title("🏪 Gestion des Dépôts")
+    st.title("🏪 Stock Opérationnel par Dépôt")
+
+    st.markdown("""
+    <div style="background:#FFF8EC;border-left:4px solid #C17A3A;border-radius:8px;padding:12px 16px;margin-bottom:16px">
+    <b>Vue Opérationnelle</b> — Où se trouve physiquement le café aujourd'hui.<br>
+    <span style="font-size:0.85rem;color:#666">
+    Dakar = stock central de référence · Les transferts et ventes décrément le stock du dépôt concerné.
+    </span>
+    </div>
+    """, unsafe_allow_html=True)
 
     df_depots  = load("Depots")
     df_stocks  = load("Stock_Depots")
