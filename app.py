@@ -1616,8 +1616,9 @@ def page_depots():
     # Récupérer la liste des dépôts disponibles
     depots_list = df_depots["Nom"].dropna().tolist() if not df_depots.empty else DEPOTS_DEFAUT
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Stock par dépôt",
+        "📈 Vue par zone",
         "🔄 Nouveau transfert",
         "📋 Historique transferts",
         "⚙️ Gérer les dépôts",
@@ -1669,8 +1670,96 @@ def page_depots():
                 fig.update_layout(showlegend=False, height=280, margin=dict(t=40,b=0))
                 st.plotly_chart(fig, use_container_width=True)
 
-    # ── Tab 2 : Nouveau transfert ───────────────────────────────
+    # ── Tab 2 : Vue par zone ────────────────────────────────────
     with tab2:
+        st.subheader("📈 Suivi des ventes et stock par zone/dépôt")
+
+        df_cmd_z = load("Commandes")
+        df_sd_z  = load("Stock_Depots")
+
+        if df_cmd_z.empty:
+            st.info("Aucune commande.")
+        else:
+            df_cmd_z["Quantité"] = pd.to_numeric(df_cmd_z["Quantité"], errors="coerce").fillna(0)
+            df_cmd_z["CA"]       = pd.to_numeric(df_cmd_z["CA"],       errors="coerce").fillna(0)
+
+            col_liv_z = "Statut_Livraison" if "Statut_Livraison" in df_cmd_z.columns else "Type_Demande"
+            VENDUS_Z  = ["Livrée", "Clôturée"]
+
+            # Filtre Lot
+            lots_dispo = sorted(df_cmd_z["Lot"].dropna().unique().tolist()) if "Lot" in df_cmd_z.columns else []
+            lot_sel = st.multiselect("Filtrer par lot", lots_dispo, default=lots_dispo, key="lot_zone")
+
+            df_z = df_cmd_z[df_cmd_z["Lot"].isin(lot_sel)].copy() if lot_sel else df_cmd_z.copy()
+
+            # Grouper par Zone / Gamme / Format
+            df_vend = df_z[df_z[col_liv_z].isin(VENDUS_Z)].groupby(
+                ["Zone", "Gamme", "Format"]
+            ).agg(
+                Unites_Vendues=("Quantité", "sum"),
+                CA_Zone=("CA", "sum")
+            ).reset_index()
+
+            df_cmd_conf = df_z[df_z[col_liv_z].isin(["Commande confirmée", "À préparer", "Préparée"])].groupby(
+                ["Zone", "Gamme", "Format"]
+            ).agg(Unites_Commandees=("Quantité", "sum")).reset_index()
+
+            # Stock initial par dépôt (Stock_Depots)
+            if not df_sd_z.empty:
+                df_sd_z["Stock_Restant"] = pd.to_numeric(df_sd_z["Stock_Restant"], errors="coerce").fillna(0).astype(int)
+                depot_to_zone = {"Dakar": "Dakar", "Touba": "Touba", "France": "France"}
+                df_sd_z["Zone"] = df_sd_z["Depot"].map(depot_to_zone)
+                stock_init = df_sd_z.groupby(["Zone", "Gamme", "Format"]).agg(
+                    Stock_Depot=("Stock_Restant", "sum")
+                ).reset_index()
+            else:
+                stock_init = pd.DataFrame()
+
+            # Afficher par zone
+            zones_dispo_z = sorted(df_z["Zone"].dropna().unique().tolist())
+
+            for zone_n in zones_dispo_z:
+                dv = df_vend[df_vend["Zone"] == zone_n] if not df_vend.empty else pd.DataFrame()
+                dc = df_cmd_conf[df_cmd_conf["Zone"] == zone_n] if not df_cmd_conf.empty else pd.DataFrame()
+
+                nb_vendus = int(dv["Unites_Vendues"].sum()) if not dv.empty else 0
+                ca_zone   = dv["CA_Zone"].sum() if not dv.empty else 0
+                nb_cmd    = int(dc["Unites_Commandees"].sum()) if not dc.empty else 0
+
+                with st.expander(f"📍 **{zone_n}** — {nb_vendus} unités vendues | {ca_zone:,.0f} FCFA | {nb_cmd} en attente", expanded=False):
+
+                    # Tableau détail ventes
+                    if not dv.empty:
+                        st.caption("**Ventes livrées**")
+                        cols_show = [c for c in ["Gamme","Format","Unites_Vendues","CA_Zone"] if c in dv.columns]
+                        st.dataframe(dv[dv["Zone"]==zone_n][cols_show],
+                                     use_container_width=True, hide_index=True,
+                                     column_config={"Unites_Vendues": st.column_config.NumberColumn("Vendues"),
+                                                    "CA_Zone": st.column_config.NumberColumn("CA (FCFA)", format="%.0f")})
+
+                    # Stock restant dans ce dépôt
+                    if not stock_init.empty:
+                        si = stock_init[stock_init["Zone"] == zone_n]
+                        if not si.empty:
+                            st.caption("**Stock restant dans ce dépôt**")
+                            st.dataframe(si[["Gamme","Format","Stock_Depot"]],
+                                         use_container_width=True, hide_index=True,
+                                         column_config={"Stock_Depot": st.column_config.NumberColumn("Stock restant")})
+
+            # Vue synthèse globale
+            st.markdown("---")
+            st.subheader("Synthèse globale")
+            if not df_vend.empty:
+                fig = px.bar(
+                    df_vend.groupby("Zone").agg(Vendues=("Unites_Vendues","sum"), CA=("CA_Zone","sum")).reset_index(),
+                    x="Zone", y="Vendues", color="Zone",
+                    title="Unités vendues par zone",
+                )
+                fig.update_layout(showlegend=False, height=280, margin=dict(t=40,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+
+    # ── Tab 3 : Nouveau transfert ───────────────────────────────
+    with tab3:
         st.subheader("📦 Créer un transfert entre dépôts")
 
         # Initialiser les produits du transfert
@@ -1788,8 +1877,8 @@ def page_depots():
                 st.success(f"✅ Transfert {id_mvt} validé — {origine} → {dest}")
                 st.rerun()
 
-    # ── Tab 3 : Historique transferts ───────────────────────────
-    with tab3:
+    # ── Tab 4 : Historique transferts ───────────────────────────
+    with tab4:
         st.subheader("📋 Historique des transferts")
         if df_mvts.empty:
             st.info("Aucun transfert enregistré.")
@@ -1813,8 +1902,8 @@ def page_depots():
                     "ID_Mouvement": st.column_config.TextColumn("N° Transfert"),
                 })
 
-    # ── Tab 4 : Gérer les dépôts ────────────────────────────────
-    with tab4:
+    # ── Tab 5 : Gérer les dépôts ────────────────────────────────
+    with tab5:
         st.subheader("⚙️ Dépôts enregistrés")
 
         if not df_depots.empty:
