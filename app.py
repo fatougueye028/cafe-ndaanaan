@@ -105,8 +105,9 @@ st.markdown("""
 # ─── Constantes métier ─────────────────────────────────────────
 GAMMES          = ["Signature", "Original", "Prestige", "Épicé", "Ñooket"]
 FORMATS         = ["250g", "500g", "1kg"]
-ZONES           = ["Touba", "Dakar", "France", "Canada", "Espagne", "Europe", "USA", "Autre"]
-LOCALISATIONS   = ["Touba", "Dakar", "France", "Canada"]
+ZONES           = ["Touba", "Dakar", "France", "Canada", "Espagne", "Europe", "USA", "Autre"]  # rétrocompatibilité
+LOCALISATIONS   = ["Touba", "Dakar", "France", "Canada"]  # pour Stock
+DEPOTS_CMD      = ["Dakar", "Touba", "France"]  # dépôt source d'une commande
 STATUTS_PAY     = ["Non payé", "Partiel", "Payé"]
 SOURCES         = ["WhatsApp", "Facebook", "TikTok", "YouTube",
                    "Recommandation", "Famille", "Autre"]
@@ -497,12 +498,14 @@ def page_new_order():
         st.subheader("Client")
         c1, c2 = st.columns(2)
         with c1:
-            client  = st.text_input("Nom *", placeholder="Aminata Diallo")
-            tel     = st.text_input("Téléphone", placeholder="77 123 45 67")
-            source  = st.selectbox("Source", SOURCES)
+            client       = st.text_input("Nom *", placeholder="Aminata Diallo")
+            tel          = st.text_input("Téléphone", placeholder="77 123 45 67")
+            source       = st.selectbox("Source", SOURCES)
         with c2:
-            zone    = st.selectbox("Zone *", ZONES)
-            comm    = st.text_area("Commentaire / Notes", height=70, placeholder="Notes internes, instructions de livraison…")
+            localisation = st.text_input("Localisation client *", placeholder="Rufisque, Parcelles, Foire, Touba, Paris…")
+            depot_cmd    = st.selectbox("Dépôt source *", DEPOTS_CMD,
+                help="De quel dépôt est prélevé ce stock ?")
+            comm         = st.text_area("Commentaire", height=55, placeholder="Notes internes…")
 
         st.subheader("Statut")
         s1, s2, s3, s4 = st.columns(4)
@@ -587,8 +590,9 @@ def page_new_order():
                     "ID":                new_id,
                     "Client":            client.strip(),
                     "Téléphone":         tel,
-                    "Zone":              zone,
                     "Source":            source,
+                    "Localisation":      localisation,
+                    "Dépôt":             depot_cmd,
                     "Gamme":             prod["gamme"],
                     "Format":            prod["fmt"],
                     "Quantité":          prod["qty"],
@@ -611,7 +615,7 @@ def page_new_order():
                         "Quantité": prod["qty"], "Zone": zone, "ID": new_id
                     })
                     _decrement_stock(row_data)
-                    _decrement_depot_stock(prod["gamme"], prod["fmt"], prod["qty"], zone)
+                    _decrement_depot_stock(prod["gamme"], prod["fmt"], prod["qty"], depot_cmd)
 
                 if statut_liv in TYPES_SACHET:
                     row_data = pd.Series({
@@ -733,20 +737,21 @@ def page_orders():
     st.markdown("---")
 
     # ── Filtres ──
-    # Valeurs dynamiques depuis les données réelles
-    zones_dispo = sorted(df["Zone"].dropna().unique().tolist()) if "Zone" in df.columns else ZONES
+    # Colonne de localisation (Zone ou Localisation selon version du sheet)
+    loc_col = "Localisation" if "Localisation" in df.columns else "Zone"
+    zones_dispo = sorted(df[loc_col].dropna().unique().tolist()) if loc_col in df.columns else ZONES
     gammes_dispo = sorted(df["Gamme"].dropna().unique().tolist()) if "Gamme" in df.columns else GAMMES
 
     with st.expander("🔍 Filtres", expanded=False):
         f1, f2, f3, f4 = st.columns(4)
-        with f1: fz = st.multiselect("Zone",     zones_dispo,  default=zones_dispo)
+        with f1: fz = st.multiselect("Localisation", zones_dispo, default=zones_dispo)
         with f2: fl = st.multiselect("Statut",   statut_vals,  default=statut_vals)
         with f3: fp = st.multiselect("Paiement", STATUTS_PAY,  default=STATUTS_PAY)
         with f4: fg = st.multiselect("Gamme",    gammes_dispo, default=gammes_dispo)
         recherche = st.text_input("🔎 Rechercher un client", placeholder="Nom du client…")
 
     mask = (
-        df["Zone"].isin(fz)
+        df[loc_col].isin(fz)
         & df[statut_col].isin(fl)
         & df["Statut_Paiement"].isin(fp)
         & df["Gamme"].isin(fg)
@@ -759,9 +764,11 @@ def page_orders():
     st.caption(f"**{df_f['ID'].nunique()} commande(s)** — CA : {ca_fcfa:,.0f} FCFA")
 
     # Colonnes affichées — toutes les colonnes présentes dans le sheet
-    COLS_PRIORITE = ["Date","Lot","ID","Client","Zone","Gamme","Format",
+    COLS_PRIORITE = ["Date","Lot","ID","Client","Localisation","Dépôt","Gamme","Format",
                      "Quantité","CA","Type_Demande","Statut_Livraison",
-                     "Statut_Paiement","Source","Date_Prevue","Offre_Commerciale","Commentaire"]
+                     "Statut_Paiement","Source","Date_Prevue","Offre_Commerciale","Commentaire",
+                     # rétrocompatibilité
+                     "Zone"]
     COLS = [c for c in COLS_PRIORITE if c in df_f.columns]
 
     st.dataframe(
@@ -840,7 +847,7 @@ def page_orders():
                     str(row_data.get("Gamme","")),
                     str(row_data.get("Format","")),
                     int(pd.to_numeric(row_data.get("Quantité", 0), errors="coerce") or 0),
-                    str(row_data.get("Zone","Dakar"))
+                    str(row_data.get("Dépôt", row_data.get("Zone","Dakar")))
                 )
             if new_liv in TYPES_SACHET and str(ancien_statut) not in TYPES_SACHET:
                 _decrement_sachet(row_data)
@@ -896,16 +903,10 @@ def _decrement_stock(row):
     except Exception as e:
         st.warning(f"⚠️ Stock café non décrémenté : {e}")
 
-def _decrement_depot_stock(gamme: str, fmt: str, qty: int, zone: str):
-    """Décrémente le stock dans Stock_Depots selon la zone de la commande."""
+def _decrement_depot_stock(gamme: str, fmt: str, qty: int, depot: str):
+    """Décrémente le stock dans Stock_Depots selon le dépôt source de la commande."""
     try:
-        # Mapper Zone → Dépôt
-        zone_to_depot = {
-            "Touba": "Touba", "Dakar": "Dakar",
-            "France": "France", "Canada": "France",
-            "Espagne": "France",
-        }
-        depot = zone_to_depot.get(zone, "Dakar")
+        # depot est maintenant directement le nom du dépôt (Dakar, Touba, France)
 
         df_sd = load("Stock_Depots")
         if df_sd.empty:

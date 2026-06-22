@@ -48,9 +48,9 @@ except gspread.SpreadsheetNotFound:
 # ── Définition des onglets et leurs en-têtes ───────────────────
 SHEETS = {
     "Commandes": [
-        "Date", "ID", "Client", "Téléphone", "Adresse", "Zone",
+        "Date", "ID", "Client", "Téléphone", "Source", "Localisation", "Dépôt",
         "Gamme", "Format", "Quantité", "Prix_Unitaire", "CA", "Devise",
-        "Type_Demande", "Statut_Livraison", "Statut_Paiement", "Source", "Lot", "Commentaire", "Date_Prevue", "Offre_Commerciale",
+        "Type_Demande", "Statut_Livraison", "Statut_Paiement", "Lot", "Commentaire", "Date_Prevue", "Offre_Commerciale",
     ],
     "Stock": [
         "Date", "Lot", "Gamme", "Format",
