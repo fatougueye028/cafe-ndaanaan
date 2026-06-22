@@ -1627,7 +1627,11 @@ def page_depots():
                     q = st.number_input("Quantité", min_value=1, value=prod["qty"], key=f"tq_{i}")
                 st.session_state.transfert_produits[i] = {"gamme": g, "fmt": f, "qty": q}
 
-            comm_t = st.text_input("Commentaire (optionnel)")
+            l1, l2 = st.columns(2)
+            with l1:
+                lot_t  = st.text_input("Lot concerné *", placeholder="Lot 3, Lot 4, Lot Magal…")
+            with l2:
+                comm_t = st.text_input("Commentaire (optionnel)")
             submitted_t = st.form_submit_button("✅ Valider le transfert", use_container_width=True, type="primary")
 
         c_add, c_del = st.columns(2)
@@ -1654,7 +1658,7 @@ def page_depots():
                 cols_sd = ws_sd.row_values(1)
 
                 for prod in st.session_state.transfert_produits:
-                    # Enregistrer le mouvement
+                    # Enregistrer le mouvement avec le lot
                     append_dict("Mouvements_Stock", {
                         "Date":             date_t.strftime("%d/%m/%Y"),
                         "ID_Mouvement":     id_mvt,
@@ -1664,12 +1668,14 @@ def page_depots():
                         "Format":           prod["fmt"],
                         "Quantite":         prod["qty"],
                         "Statut":           "Validé",
-                        "Commentaire":      comm_t,
+                        "Commentaire":      f"Lot: {lot_t} — {comm_t}" if lot_t else comm_t,
                     })
 
-                    # Décrémenter le dépôt origine
+                    # Décrémenter le dépôt origine (filtré par lot si disponible)
                     if not df_stocks_full.empty:
+                        mask_lot = (df_stocks_full["Lot"] == lot_t) if "Lot" in df_stocks_full.columns and lot_t else pd.Series([True]*len(df_stocks_full))
                         m_src = (
+                            mask_lot &
                             (df_stocks_full["Depot"]  == origine) &
                             (df_stocks_full["Gamme"]  == prod["gamme"]) &
                             (df_stocks_full["Format"] == prod["fmt"])
