@@ -580,8 +580,6 @@ def page_new_order():
             # Auto-clôturer si Livrée + Payé
             if achat_immediat and type_dem not in ["Clôturée"]:
                 type_dem = "Clôturée"
-            offre_val  = "Offre commerciale" if offert else ""
-
             for prod in st.session_state.produits:
                 ca_ligne = round(prod["prix"] * prod["qty"], 2)
                 append_dict("Commandes", {
