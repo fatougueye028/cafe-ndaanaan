@@ -196,7 +196,7 @@ def _gs_client():
 def _ws(name: str):
     return _gs_client().open(st.secrets["SHEET_NAME"]).worksheet(name)
 
-@st.cache_data(ttl=0)
+@st.cache_data(ttl=15)
 def load(sheet: str) -> pd.DataFrame:
     records = _ws(sheet).get_all_records(value_render_option="UNFORMATTED_VALUE")
     return pd.DataFrame(records) if records else pd.DataFrame()
