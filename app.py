@@ -411,14 +411,17 @@ def page_dashboard():
         st.plotly_chart(fig1, use_container_width=True)
 
     with col_b:
-        zc = df.groupby("Zone").size().reset_index(name="Commandes")
-        fig2 = px.pie(
-            zc, values="Commandes", names="Zone",
-            title="Commandes par zone",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-        )
-        fig2.update_layout(height=300, margin=dict(t=40, b=0))
-        st.plotly_chart(fig2, use_container_width=True)
+        # Utiliser Dépôt si disponible, sinon Localisation, sinon Zone
+        grp_col = "Dépôt" if "Dépôt" in df.columns else "Localisation" if "Localisation" in df.columns else "Zone"
+        if grp_col in df.columns:
+            zc = df.groupby(grp_col).size().reset_index(name="Commandes")
+            fig2 = px.pie(
+                zc, values="Commandes", names=grp_col,
+                title="Commandes par dépôt",
+                color_discrete_sequence=px.colors.qualitative.Set2,
+            )
+            fig2.update_layout(height=300, margin=dict(t=40, b=0))
+            st.plotly_chart(fig2, use_container_width=True)
 
     col_c, col_d = st.columns(2)
 
@@ -1754,7 +1757,7 @@ def page_depots():
             st.subheader("Synthèse globale")
             if not df_vend.empty:
                 fig = px.bar(
-                    df_vend.groupby("Zone").agg(Vendues=("Unites_Vendues","sum"), CA=("CA_Zone","sum")).reset_index(),
+                    df_vend.groupby("Zone", dropna=False).agg(Vendues=("Unites_Vendues","sum"), CA=("CA_Zone","sum")).reset_index(),
                     x="Zone", y="Vendues", color="Zone",
                     title="Unités vendues par zone",
                 )
