@@ -8,6 +8,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
+import hashlib
+import secrets as _secrets_mod
 
 # ─── Configuration page ────────────────────────────────────────
 st.set_page_config(
@@ -97,8 +99,66 @@ st.markdown("""
         background: #FFFBF7;
     }
 
-    /* ── Mobile ── */
-    @media(max-width:640px){ .block-container{padding:0.5rem 0.4rem;} }
+    /* ── Login ── */
+    .login-wrap {
+        max-width: 420px;
+        margin: 40px auto 0;
+        padding: 40px 36px;
+        background: linear-gradient(135deg, #FFF8F0 0%, #FFF0DC 100%);
+        border: 1px solid #E8C99A;
+        border-radius: 18px;
+        box-shadow: 0 8px 32px #2C100818;
+    }
+
+    /* ── Cartes commandes (vue mobile) ── */
+    .order-card {
+        background: #FFFBF7;
+        border: 1px solid #E8C99A;
+        border-left: 5px solid #C17A3A;
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        box-shadow: 0 2px 8px #C17A3A11;
+    }
+    .oc-id   { font-size:0.72rem; color:#8B6B55; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
+    .oc-client { font-size:1.05rem; font-weight:700; color:#2C1008; margin-top:2px; }
+    .oc-phone  { font-size:0.83rem; color:#6B3015; }
+    .oc-product { font-size:0.88rem; color:#4A1E0A; margin-top:6px; line-height:1.5; }
+    .oc-amount { font-size:1.1rem; font-weight:700; color:#C17A3A; }
+    .oc-chip {
+        display:inline-block; font-size:0.72rem; padding:3px 9px;
+        border-radius:20px; font-weight:600; margin-left:6px;
+    }
+    .chip-livree   { background:#E8F5E9; color:#2E7D32; }
+    .chip-preparee { background:#FFF3E0; color:#E65100; }
+    .chip-attente  { background:#FDE8E8; color:#C62828; }
+    .chip-cloturee { background:#E8EAF6; color:#3949AB; }
+    .chip-paye     { background:#E8F5E9; color:#2E7D32; }
+    .chip-nonpaye  { background:#FDE8E8; color:#C62828; }
+    .chip-partiel  { background:#FFF3E0; color:#E65100; }
+
+    /* ── Badge utilisateur sidebar ── */
+    .user-badge {
+        background:#C17A3A22; border-radius:8px; padding:10px 12px; margin:8px 0;
+    }
+    .user-badge .u-nom  { font-size:0.95rem; font-weight:700; color:#F5E6D0; }
+    .user-badge .u-role { font-size:0.75rem; color:#C17A3A; margin-top:2px; }
+
+    /* ── Mobile responsive ── */
+    @media (max-width: 768px) {
+        .block-container { padding: 0.4rem 0.3rem !important; }
+        h1 { font-size: 1.35rem !important; }
+        h2 { font-size: 1.1rem !important; }
+        h3 { font-size: 0.95rem !important; }
+        /* Boutons plus grands pour les doigts */
+        .stButton > button {
+            min-height: 48px !important;
+            font-size: 0.95rem !important;
+        }
+        /* KPI plus compacts */
+        .kpi-box .val { font-size: 1.4rem; }
+        .kpi-box { padding: 12px 10px; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -223,6 +283,20 @@ def set_cell(sheet: str, df_row_idx: int, col_name: str, df: pd.DataFrame, value
     _ws(sheet).update_cell(df_row_idx + 2, col_idx, value)
     bust()
 
+def update_rows(sheet: str, match_col: str, match_val, set_col: str, set_val):
+    """Met à jour toutes les lignes où match_col == match_val dans le sheet."""
+    ws = _ws(sheet)
+    headers = ws.row_values(1)
+    if set_col not in headers or match_col not in headers:
+        return
+    col_idx   = headers.index(set_col)   + 1
+    match_idx = headers.index(match_col) + 1
+    all_vals  = ws.col_values(match_idx)
+    for i, v in enumerate(all_vals[1:], start=2):  # ignorer l'entête
+        if str(v) == str(match_val):
+            ws.update_cell(i, col_idx, set_val)
+    bust()
+
 def next_id(df: pd.DataFrame, type_demande: str = "Commande confirmée") -> str:
     year   = date.today().year
     prefix = ID_PREFIXES.get(type_demande, "CMD")
@@ -234,6 +308,122 @@ def next_id(df: pd.DataFrame, type_demande: str = "Commande confirmée") -> str:
                 try: nums.append(int(v.split("-")[-1]))
                 except ValueError: pass
     return f"{full_prefix}{(max(nums) + 1 if nums else 1):03d}"
+
+# ─── Authentification ──────────────────────────────────────────
+
+# Pages autorisées par rôle
+_PAGES_ADMIN = ["dashboard","new_order","orders","stock","depots","production","sachets","livreurs"]
+_PAGES_DAKAR = ["dashboard","new_order","orders","stock","depots","production","sachets","livreurs"]
+_PAGES_DEPOT = ["new_order","orders","depots"]
+
+ROLES_PAGES = {
+    "Admin":      _PAGES_ADMIN,
+    "Dakar":      _PAGES_DAKAR,
+    "Touba":      _PAGES_DEPOT,
+    "France":     _PAGES_DEPOT,
+    "Partenaire": _PAGES_DEPOT,
+}
+
+def _hash_pwd(password: str, salt: str = None) -> str:
+    """Hash le mot de passe : format sha256$<salt>$<hash>"""
+    if salt is None:
+        salt = _secrets_mod.token_hex(16)
+    h = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return f"sha256${salt}${h}"
+
+def _verify_pwd(password: str, stored: str) -> bool:
+    try:
+        _, salt, _ = stored.split("$")
+        return _hash_pwd(password, salt) == stored
+    except Exception:
+        return False
+
+def is_authenticated() -> bool:
+    return st.session_state.get("auth_ok", False)
+
+def current_user() -> dict:
+    return {
+        "nom":   st.session_state.get("user_nom",   ""),
+        "role":  st.session_state.get("user_role",  "Admin"),
+        "depot": st.session_state.get("user_depot", ""),
+        "email": st.session_state.get("user_email", ""),
+    }
+
+def user_depot_filter():
+    """Retourne le dépôt de l'utilisateur, ou None si Admin / Dakar (voit tout)."""
+    role = st.session_state.get("user_role", "Admin")
+    if role in ("Admin", "Dakar"):
+        return None
+    return st.session_state.get("user_depot", None) or None
+
+def do_logout():
+    for k in ["auth_ok", "user_nom", "user_role", "user_depot", "user_email"]:
+        st.session_state.pop(k, None)
+    st.rerun()
+
+def page_login():
+    """Page de connexion."""
+    # Centre le formulaire
+    _, col, _ = st.columns([1, 2, 1])
+    with col:
+        logo_b64 = _load_image_b64("logo.png")
+        if logo_b64:
+            st.markdown(
+                f'<div style="text-align:center;margin-bottom:20px">'
+                f'<img src="data:image/png;base64,{logo_b64}" style="width:110px;border-radius:12px"/>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div style="text-align:center;font-size:2.5rem;margin-bottom:8px">☕</div>', unsafe_allow_html=True)
+
+        st.markdown(
+            '<h2 style="text-align:center;margin-bottom:4px">Kafe Ndaanaan</h2>'
+            '<p style="text-align:center;color:#8B6B55;font-size:0.85rem;margin-bottom:28px">Café Touba Artisanal</p>',
+            unsafe_allow_html=True,
+        )
+
+        email = st.text_input("Email ou téléphone", placeholder="votre@email.com", key="li_email")
+        pwd   = st.text_input("Mot de passe", type="password", key="li_pwd")
+
+        if st.button("Se connecter", use_container_width=True, type="primary"):
+            if not email.strip() or not pwd:
+                st.error("Renseigne ton identifiant et ton mot de passe.")
+            else:
+                try:
+                    df_u = load("Utilisateurs")
+                    if df_u.empty:
+                        # Aucun utilisateur → accès admin direct (setup initial)
+                        st.session_state.auth_ok    = True
+                        st.session_state.user_nom   = "Admin"
+                        st.session_state.user_role  = "Admin"
+                        st.session_state.user_depot = ""
+                        st.session_state.user_email = email.strip()
+                        st.info("Aucun utilisateur configuré — connecté en Admin par défaut. Lance init_users.py.")
+                        st.rerun()
+                    else:
+                        mask = (
+                            (df_u["Email"].astype(str).str.lower()     == email.strip().lower()) |
+                            (df_u["Téléphone"].astype(str)             == email.strip())
+                        ) & (df_u["Actif"].astype(str).str.lower().isin(["1","true","oui","yes","actif"]))
+                        row = df_u[mask]
+                        if row.empty:
+                            st.error("Identifiant inconnu ou compte désactivé.")
+                        else:
+                            u = row.iloc[0]
+                            if _verify_pwd(pwd, str(u.get("Mot_de_passe",""))):
+                                st.session_state.auth_ok    = True
+                                st.session_state.user_nom   = str(u.get("Nom",""))
+                                st.session_state.user_role  = str(u.get("Rôle","Partenaire"))
+                                st.session_state.user_depot = str(u.get("Dépôt",""))
+                                st.session_state.user_email = email.strip()
+                                st.rerun()
+                            else:
+                                st.error("Mot de passe incorrect.")
+                except Exception as e:
+                    st.error(f"Erreur de connexion : {e}")
+
+        st.markdown('<p style="text-align:center;font-size:0.78rem;color:#8B6B55;margin-top:16px">Contacte l\'administrateur pour obtenir un accès.</p>', unsafe_allow_html=True)
 
 # ─── Navigation ────────────────────────────────────────────────
 PAGES = {
@@ -250,7 +440,7 @@ PAGES = {
 def sidebar_nav() -> str:
     import os, base64
 
-    # Afficher le logo s'il existe dans assets/
+    # Logo
     logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
@@ -270,12 +460,35 @@ def sidebar_nav() -> str:
             "</div>",
             unsafe_allow_html=True,
         )
-    st.sidebar.markdown("<hr style='margin:12px 0;border-color:#C17A3A55'/>", unsafe_allow_html=True)
-    choice = PAGES[st.sidebar.radio("", list(PAGES.keys()), label_visibility="collapsed")]
+
+    # Badge utilisateur connecté
+    user = current_user()
+    depot_label = f" · {user['depot']}" if user["depot"] else ""
+    st.sidebar.markdown(
+        f'<div class="user-badge">'
+        f'<div class="u-nom">👤 {user["nom"]}</div>'
+        f'<div class="u-role">{user["role"]}{depot_label}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.sidebar.markdown("<hr style='margin:8px 0;border-color:#C17A3A55'/>", unsafe_allow_html=True)
+
+    # Pages filtrées par rôle
+    role = user["role"]
+    allowed = ROLES_PAGES.get(role, _PAGES_DEPOT)
+    pages_role = {k: v for k, v in PAGES.items() if v in allowed}
+    if not pages_role:
+        pages_role = PAGES  # fallback sécurité
+
+    choice = pages_role[st.sidebar.radio("", list(pages_role.keys()), label_visibility="collapsed")]
+
     st.sidebar.markdown("---")
-    if st.sidebar.button("🔄 Rafraîchir les données", use_container_width=True):
+    if st.sidebar.button("🔄 Rafraîchir", use_container_width=True):
         bust()
         st.rerun()
+    if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
+        do_logout()
     return choice
 
 # ─── Helpers d'affichage ───────────────────────────────────────
@@ -506,8 +719,14 @@ def page_new_order():
         source       = st.selectbox("Source", SOURCES, key="nd_source")
     with c2:
         localisation = st.text_input("Localisation client *", placeholder="Rufisque, Parcelles, Foire, Touba, Paris…", key="nd_loc")
-        depot_cmd    = st.selectbox("Dépôt source *", DEPOTS_CMD,
-            help="De quel dépôt est prélevé ce stock ?", key="nd_depot")
+        # Verrouiller le dépôt pour les utilisateurs non-admin
+        _depot_lock = user_depot_filter()
+        if _depot_lock:
+            depot_cmd = _depot_lock
+            st.text_input("Dépôt source", value=_depot_lock, disabled=True, key="nd_depot_locked")
+        else:
+            depot_cmd = st.selectbox("Dépôt source *", DEPOTS_CMD,
+                help="De quel dépôt est prélevé ce stock ?", key="nd_depot")
         comm         = st.text_area("Commentaire", height=55, placeholder="Notes internes…", key="nd_comm")
 
     # ── 3. Statut ───────────────────────────────────────────────
@@ -675,41 +894,117 @@ def page_new_order():
                 st.balloons()
 
 # ─── Page : Commandes ──────────────────────────────────────────
+def _order_card(order_id: str, lines: pd.DataFrame):
+    """Affiche une commande sous forme de carte avec boutons rapides."""
+    first      = lines.iloc[0]
+    ca_total   = pd.to_numeric(lines["CA"], errors="coerce").fillna(0).sum()
+    col_liv    = "Statut_Livraison" if "Statut_Livraison" in lines.columns else "Type_Demande"
+    statut_liv = str(first.get("Statut_Livraison", ""))
+    statut_pay = str(first.get("Statut_Paiement", "Non payé"))
+    type_dem   = str(first.get("Type_Demande", ""))
+    devise     = str(first.get("Devise", "FCFA"))
+
+    chip_liv = {
+        "Livrée": "chip-livree", "Clôturée": "chip-cloturee",
+        "Préparée": "chip-preparee", "Annulée": "chip-cloturee",
+    }.get(statut_liv, "chip-attente")
+    chip_pay = {"Payé": "chip-paye", "Partiel": "chip-partiel"}.get(statut_pay, "chip-nonpaye")
+
+    products = []
+    for _, ln in lines.iterrows():
+        qty = int(pd.to_numeric(ln.get("Quantité", 1), errors="coerce") or 1)
+        products.append(f"{ln.get('Gamme','')} {ln.get('Format','')} ×{qty}")
+
+    phone    = str(first.get("Téléphone", "")).strip()
+    date_cmd = str(first.get("Date", ""))
+    lot_cmd  = str(first.get("Lot", "")).strip()
+    lot_txt  = f" · {lot_cmd}" if lot_cmd else ""
+    statut_display = statut_liv or type_dem
+
+    st.markdown(f"""
+    <div class="order-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px">
+            <span class="oc-id">{order_id}{lot_txt} · {date_cmd}</span>
+            <span class="oc-chip {chip_liv}">{statut_display}</span>
+        </div>
+        <div class="oc-client">{first.get('Client','')}</div>
+        {f'<div class="oc-phone">📞 {phone}</div>' if phone else ''}
+        <div class="oc-product">{'<br>'.join(products)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:4px">
+            <span class="oc-amount">{ca_total:,.0f} {devise}</span>
+            <span class="oc-chip {chip_pay}">{statut_pay}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Boutons rapides
+    is_done = statut_liv in ("Livrée", "Clôturée", "Annulée") and statut_pay == "Payé"
+    if not is_done:
+        btn_actions = []
+        if statut_liv not in ("Préparée", "Livrée", "Clôturée", "Annulée"):
+            btn_actions.append(("📦 Préparée", f"qprep_{order_id}", "Statut_Livraison", "Préparée"))
+        if statut_liv not in ("Livrée", "Clôturée", "Annulée"):
+            btn_actions.append(("🚚 Livrée",   f"qliv_{order_id}",  "Statut_Livraison", "Livrée"))
+        if statut_pay != "Payé":
+            btn_actions.append(("✅ Payée",    f"qpay_{order_id}",  "Statut_Paiement",  "Payé"))
+
+        if btn_actions:
+            bcols = st.columns(len(btn_actions))
+            for bc, (label, key, field, val) in zip(bcols, btn_actions):
+                with bc:
+                    if st.button(label, key=key, use_container_width=True):
+                        update_rows("Commandes", "ID", order_id, field, val)
+                        # Décrémenter stock si passage à Livrée/Préparée
+                        if field == "Statut_Livraison" and val in TYPES_STOCK:
+                            for _, ln in lines.iterrows():
+                                _decrement_stock(ln)
+                                _decrement_depot_stock(
+                                    str(ln.get("Gamme","")), str(ln.get("Format","")),
+                                    int(pd.to_numeric(ln.get("Quantité",0), errors="coerce") or 0),
+                                    str(ln.get("Dépôt", ln.get("Zone","Dakar")))
+                                )
+                        # Clôturer si Livrée + Payé
+                        if (field == "Statut_Livraison" and val == "Livrée" and statut_pay == "Payé") or \
+                           (field == "Statut_Paiement"  and val == "Payé"  and statut_liv == "Livrée"):
+                            update_rows("Commandes", "ID", order_id, "Type_Demande", "Clôturée")
+                        bust()
+                        st.rerun()
+
+
 def page_orders():
     st.title("📋 Commandes")
 
-    df = load("Commandes")
-    if df.empty:
+    df_raw = load("Commandes")
+    if df_raw.empty:
         st.info("Aucune commande enregistrée.")
         return
+
+    # ── Filtre dépôt utilisateur ────────────────────────────────
+    depot_f = user_depot_filter()
+    depot_col_o = "Dépôt" if "Dépôt" in df_raw.columns else "Zone"
+    df = df_raw[df_raw[depot_col_o] == depot_f].copy() if depot_f and depot_col_o in df_raw.columns else df_raw.copy()
 
     df["CA"]       = pd.to_numeric(df["CA"],       errors="coerce").fillna(0)
     df["Quantité"] = pd.to_numeric(df["Quantité"], errors="coerce").fillna(0)
 
-    # Colonne de statut active
+    # Colonnes de statut
     statut_col  = "Type_Demande" if "Type_Demande" in df.columns else "Statut_Livraison"
+    col_liv     = "Statut_Livraison" if "Statut_Livraison" in df.columns else statut_col
     statut_vals = sorted(df[statut_col].dropna().unique().tolist()) if statut_col in df.columns else TYPES_DEMANDE
 
-    # CA réel = commandes confirmées uniquement (hors prospects et précommandes)
+    # CA réel
     REEL = ["Commande confirmée", "Préparée", "Livrée", "À préparer"]
-    df_reel = df[
-        df[statut_col].isin(REEL) &
-        ~df[statut_col].isin(["Prospect / À rappeler", "Précommande"])
-    ]
-
-    # Prospects / précommandes
-    PREV = ["Prospect / À rappeler", "Précommande"]
+    df_reel = df[df[statut_col].isin(REEL) & ~df[statut_col].isin(["Prospect / À rappeler", "Précommande"])]
+    PREV    = ["Prospect / À rappeler", "Précommande"]
     df_prev = df[df[statut_col].isin(PREV)]
 
-    # ── KPIs — utilise Statut_Livraison pour les statuts opérationnels ──
-    col_liv = "Statut_Livraison" if "Statut_Livraison" in df.columns else statut_col
-    nb_total   = df["ID"].nunique()
-    nb_livrees = df[df[col_liv] == "Livrée"]["ID"].nunique()
-    # À préparer : uniquement commandes confirmées (pas prospects/précommandes)
+    # ── KPIs ────────────────────────────────────────────────────
     mask_prep = (
         df[col_liv].isin(["À préparer", "Préparée"])
         & df[statut_col].isin(["Commande confirmée", "À préparer", "Préparée"])
     )
+    nb_total   = df["ID"].nunique()
+    nb_livrees = df[df[col_liv] == "Livrée"]["ID"].nunique()
     nb_a_prep  = df[mask_prep]["ID"].nunique()
 
     k1, k2, k3, k4 = st.columns(4)
@@ -725,111 +1020,119 @@ def page_orders():
             unsafe_allow_html=True,
         )
 
-    # ── Tableau : Commandes à préparer ──────────────────────────
-    st.markdown("---")
-    st.subheader("🔔 Commandes à préparer")
+    # ── Tabs : Vue cartes (mobile) / Vue tableau (desktop) ──────
+    tab_cartes, tab_tableau = st.tabs(["📱 Vue cartes", "📊 Vue tableau"])
 
-    df_a_prep = df[mask_prep].copy()
-    if df_a_prep.empty:
-        st.success("✅ Aucune commande en attente de préparation.")
-    else:
-        COLS_PREP = ["Date","Lot","ID","Client","Zone","Gamme","Format",
-                     "Quantité","CA","Statut_Livraison","Statut_Paiement","Date_Prevue","Commentaire"]
-        COLS_PREP = [c for c in COLS_PREP if c in df_a_prep.columns]
+    # ── TAB 1 : Vue cartes ──────────────────────────────────────
+    with tab_cartes:
+        filtre_opt = st.selectbox(
+            "Afficher",
+            ["À traiter (non livrées)", "Livrées non payées", "Toutes les commandes"],
+            key="card_filter",
+        )
+        if filtre_opt == "À traiter (non livrées)":
+            df_cards = df[~df[col_liv].isin(["Livrée", "Clôturée", "Annulée"])].copy()
+        elif filtre_opt == "Livrées non payées":
+            df_cards = df[(df[col_liv].isin(["Livrée"])) & df["Statut_Paiement"].isin(["Non payé","Partiel"])].copy()
+        else:
+            df_cards = df.copy()
+
+        recherche_c = st.text_input("🔎 Rechercher", placeholder="Nom du client…", key="search_cards")
+        if recherche_c.strip():
+            df_cards = df_cards[df_cards["Client"].str.contains(recherche_c.strip(), case=False, na=False)]
+
+        if df_cards.empty:
+            st.success("✅ Aucune commande dans cette sélection.")
+        else:
+            st.caption(f"{df_cards['ID'].nunique()} commande(s)")
+            for oid in df_cards["ID"].dropna().unique():
+                _order_card(oid, df_cards[df_cards["ID"] == oid])
+
+    # ── TAB 2 : Vue tableau ─────────────────────────────────────
+    with tab_tableau:
+        # Commandes à préparer
+        st.subheader("🔔 Commandes à préparer")
+        df_a_prep = df[mask_prep].copy()
+        if df_a_prep.empty:
+            st.success("✅ Aucune commande en attente de préparation.")
+        else:
+            COLS_PREP = ["Date","Lot","ID","Client","Zone","Gamme","Format",
+                         "Quantité","CA","Statut_Livraison","Statut_Paiement","Date_Prevue","Commentaire"]
+            COLS_PREP = [c for c in COLS_PREP if c in df_a_prep.columns]
+            st.dataframe(
+                df_a_prep[COLS_PREP].sort_values("Date_Prevue") if "Date_Prevue" in df_a_prep.columns
+                else df_a_prep[COLS_PREP],
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "CA":               st.column_config.NumberColumn("CA (FCFA)", format="%.0f"),
+                    "Statut_Livraison": st.column_config.TextColumn("Statut"),
+                    "Date_Prevue":      st.column_config.TextColumn("Date prévue"),
+                }
+            )
+
+        # Livrées non payées
+        st.markdown("---")
+        st.subheader("💸 Livrées non payées")
+        mask_liv_nonpay = (df[col_liv] == "Livrée") & (df["Statut_Paiement"].isin(["Non payé", "Partiel"]))
+        df_liv_np = df[mask_liv_nonpay].copy()
+        if df_liv_np.empty:
+            st.success("✅ Toutes les commandes livrées sont payées.")
+        else:
+            total_du = df_liv_np["CA"].sum()
+            st.markdown(
+                f'<div class="alert-rouge">🔴 <b>{df_liv_np["ID"].nunique()} commande(s) — {total_du:,.0f} FCFA à récupérer</b></div>',
+                unsafe_allow_html=True,
+            )
+            COLS_NP = ["Date","Lot","ID","Client","Zone","Gamme","Format","Quantité","CA","Statut_Paiement","Commentaire"]
+            COLS_NP = [c for c in COLS_NP if c in df_liv_np.columns]
+            st.dataframe(df_liv_np[COLS_NP], use_container_width=True, hide_index=True,
+                         column_config={"CA": st.column_config.NumberColumn("CA (FCFA)", format="%.0f")})
+
+        st.markdown("---")
+
+        # Filtres
+        loc_col      = "Localisation" if "Localisation" in df.columns else "Zone"
+        zones_dispo  = sorted(df[loc_col].dropna().unique().tolist()) if loc_col in df.columns else ZONES
+        gammes_dispo = sorted(df["Gamme"].dropna().unique().tolist()) if "Gamme" in df.columns else GAMMES
+
+        with st.expander("🔍 Filtres", expanded=False):
+            f1, f2, f3, f4 = st.columns(4)
+            with f1: fz = st.multiselect("Localisation", zones_dispo, default=zones_dispo)
+            with f2: fl = st.multiselect("Statut",   statut_vals,  default=statut_vals)
+            with f3: fp = st.multiselect("Paiement", STATUTS_PAY,  default=STATUTS_PAY)
+            with f4: fg = st.multiselect("Gamme",    gammes_dispo, default=gammes_dispo)
+            recherche = st.text_input("🔎 Rechercher un client", placeholder="Nom du client…")
+
+        mask_tab = (
+            df[loc_col].isin(fz)
+            & df[statut_col].isin(fl)
+            & df["Statut_Paiement"].isin(fp)
+            & df["Gamme"].isin(fg)
+        )
+        df_f = df[mask_tab].copy()
+        if recherche.strip():
+            df_f = df_f[df_f["Client"].str.contains(recherche.strip(), case=False, na=False)]
+
+        ca_fcfa = df_f[df_f["Devise"] == "FCFA"]["CA"].sum()
+        st.caption(f"**{df_f['ID'].nunique()} commande(s)** — CA : {ca_fcfa:,.0f} FCFA")
+
+        COLS_PRIORITE = ["Date","Lot","ID","Client","Localisation","Dépôt","Gamme","Format",
+                         "Quantité","CA","Type_Demande","Statut_Livraison",
+                         "Statut_Paiement","Source","Date_Prevue","Offre_Commerciale","Commentaire","Zone"]
+        COLS = [c for c in COLS_PRIORITE if c in df_f.columns]
         st.dataframe(
-            df_a_prep[COLS_PREP].sort_values("Date_Prevue") if "Date_Prevue" in df_a_prep.columns
-            else df_a_prep[COLS_PREP],
-            use_container_width=True,
-            hide_index=True,
+            df_f[COLS], use_container_width=True, hide_index=True,
             column_config={
-                "CA":               st.column_config.NumberColumn("CA (FCFA)", format="%.0f"),
-                "Statut_Livraison": st.column_config.TextColumn("Statut"),
-                "Date_Prevue":      st.column_config.TextColumn("Date prévue"),
-            }
+                "CA":                st.column_config.NumberColumn("CA (FCFA)", format="%.0f"),
+                "Type_Demande":      st.column_config.SelectboxColumn("Type", options=TYPES_DEMANDE),
+                "Statut_Livraison":  st.column_config.SelectboxColumn("Livraison", options=STATUTS_LIV),
+                "Statut_Paiement":   st.column_config.SelectboxColumn("Paiement", options=STATUTS_PAY),
+                "Date_Prevue":       st.column_config.TextColumn("Date prévue"),
+                "Offre_Commerciale": st.column_config.TextColumn("Offre comm."),
+            },
         )
 
-    # ── Tableau : Livrées non payées ─────────────────────────────
-    st.markdown("---")
-    st.subheader("💸 Commandes livrées non payées")
-
-    col_liv = "Statut_Livraison" if "Statut_Livraison" in df.columns else statut_col
-    mask_liv_nonpay = (
-        (df[col_liv] == "Livrée") &
-        (df["Statut_Paiement"].isin(["Non payé", "Partiel"]))
-    )
-    df_liv_np = df[mask_liv_nonpay].copy()
-
-    if df_liv_np.empty:
-        st.success("✅ Toutes les commandes livrées sont payées.")
-    else:
-        df_liv_np["CA"] = pd.to_numeric(df_liv_np["CA"], errors="coerce").fillna(0)
-        total_du = df_liv_np["CA"].sum()
-        st.markdown(
-            f'<div class="alert-rouge">🔴 <b>{df_liv_np["ID"].nunique()} commande(s) livrées non payées — {total_du:,.0f} FCFA à récupérer</b></div>',
-            unsafe_allow_html=True,
-        )
-        COLS_NP = ["Date","Lot","ID","Client","Zone","Gamme","Format",
-                   "Quantité","CA","Statut_Paiement","Commentaire"]
-        COLS_NP = [c for c in COLS_NP if c in df_liv_np.columns]
-        st.dataframe(
-            df_liv_np[COLS_NP],
-            use_container_width=True,
-            hide_index=True,
-            column_config={"CA": st.column_config.NumberColumn("CA (FCFA)", format="%.0f")}
-        )
-
-    st.markdown("---")
-
-    # ── Filtres ──
-    # Colonne de localisation (Zone ou Localisation selon version du sheet)
-    loc_col = "Localisation" if "Localisation" in df.columns else "Zone"
-    zones_dispo = sorted(df[loc_col].dropna().unique().tolist()) if loc_col in df.columns else ZONES
-    gammes_dispo = sorted(df["Gamme"].dropna().unique().tolist()) if "Gamme" in df.columns else GAMMES
-
-    with st.expander("🔍 Filtres", expanded=False):
-        f1, f2, f3, f4 = st.columns(4)
-        with f1: fz = st.multiselect("Localisation", zones_dispo, default=zones_dispo)
-        with f2: fl = st.multiselect("Statut",   statut_vals,  default=statut_vals)
-        with f3: fp = st.multiselect("Paiement", STATUTS_PAY,  default=STATUTS_PAY)
-        with f4: fg = st.multiselect("Gamme",    gammes_dispo, default=gammes_dispo)
-        recherche = st.text_input("🔎 Rechercher un client", placeholder="Nom du client…")
-
-    mask = (
-        df[loc_col].isin(fz)
-        & df[statut_col].isin(fl)
-        & df["Statut_Paiement"].isin(fp)
-        & df["Gamme"].isin(fg)
-    )
-    df_f = df[mask].copy()
-    if recherche.strip():
-        df_f = df_f[df_f["Client"].str.contains(recherche.strip(), case=False, na=False)]
-
-    ca_fcfa = df_f[df_f["Devise"] == "FCFA"]["CA"].sum()
-    st.caption(f"**{df_f['ID'].nunique()} commande(s)** — CA : {ca_fcfa:,.0f} FCFA")
-
-    # Colonnes affichées — toutes les colonnes présentes dans le sheet
-    COLS_PRIORITE = ["Date","Lot","ID","Client","Localisation","Dépôt","Gamme","Format",
-                     "Quantité","CA","Type_Demande","Statut_Livraison",
-                     "Statut_Paiement","Source","Date_Prevue","Offre_Commerciale","Commentaire",
-                     # rétrocompatibilité
-                     "Zone"]
-    COLS = [c for c in COLS_PRIORITE if c in df_f.columns]
-
-    st.dataframe(
-        df_f[COLS],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "CA":               st.column_config.NumberColumn("CA (FCFA)", format="%.0f"),
-            "Type_Demande":     st.column_config.SelectboxColumn("Type", options=TYPES_DEMANDE),
-            "Statut_Livraison": st.column_config.SelectboxColumn("Livraison", options=STATUTS_LIV),
-            "Statut_Paiement":  st.column_config.SelectboxColumn("Paiement", options=STATUTS_PAY),
-            "Date_Prevue":      st.column_config.TextColumn("Date prévue"),
-            "Offre_Commerciale":st.column_config.TextColumn("Offre comm."),
-        },
-    )
-
-    # ── Modifier ──
+    # ── Modifier (hors tabs pour accès depuis les deux vues) ────
     st.markdown("---")
     st.subheader("✏️ Modifier une commande")
 
@@ -1658,8 +1961,19 @@ def page_depots():
     df_mvts    = load("Mouvements_Stock")
     df_cmd     = load("Commandes")
 
-    # Récupérer la liste des dépôts disponibles
+    # Filtre dépôt utilisateur
+    _depot_lock_d = user_depot_filter()
+
+    # Récupérer la liste des dépôts disponibles (filtrée si non-admin)
     depots_list = df_depots["Nom"].dropna().tolist() if not df_depots.empty else DEPOTS_DEFAUT
+    if _depot_lock_d:
+        depots_list = [d for d in depots_list if d == _depot_lock_d]
+        if df_stocks is not None and not df_stocks.empty and "Depot" in df_stocks.columns:
+            df_stocks = df_stocks[df_stocks["Depot"] == _depot_lock_d].copy()
+        if df_cmd is not None and not df_cmd.empty:
+            depot_col_d = "Dépôt" if "Dépôt" in df_cmd.columns else "Zone"
+            if depot_col_d in df_cmd.columns:
+                df_cmd = df_cmd[df_cmd[depot_col_d] == _depot_lock_d].copy()
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Stock par dépôt",
@@ -1740,16 +2054,20 @@ def page_depots():
             # Grouper par Dépôt (source du stock), pas par localisation client
             depot_col_z = "Dépôt" if "Dépôt" in df_z.columns else "Zone"
 
+            # Inclure Lot dans le groupby s'il existe
+            grp_cols_vend = [depot_col_z, "Lot", "Gamme", "Format"] if "Lot" in df_z.columns else [depot_col_z, "Gamme", "Format"]
+            rename_vend   = {depot_col_z: "Zone"}
+
             df_vend = df_z[df_z[col_liv_z].isin(VENDUS_Z)].groupby(
-                [depot_col_z, "Gamme", "Format"]
+                grp_cols_vend
             ).agg(
                 Unites_Vendues=("Quantité", "sum"),
                 CA_Zone=("CA", "sum")
-            ).reset_index().rename(columns={depot_col_z: "Zone"})
+            ).reset_index().rename(columns=rename_vend)
 
             df_cmd_conf = df_z[df_z[col_liv_z].isin(["Commande confirmée", "À préparer", "Préparée"])].groupby(
-                [depot_col_z, "Gamme", "Format"]
-            ).agg(Unites_Commandees=("Quantité", "sum")).reset_index().rename(columns={depot_col_z: "Zone"})
+                grp_cols_vend
+            ).agg(Unites_Commandees=("Quantité", "sum")).reset_index().rename(columns=rename_vend)
 
             # Stock initial par dépôt (Stock_Depots)
             if not df_sd_z.empty:
@@ -1778,7 +2096,7 @@ def page_depots():
                     # Tableau détail ventes
                     if not dv.empty:
                         st.caption("**Ventes livrées**")
-                        cols_show = [c for c in ["Gamme","Format","Unites_Vendues","CA_Zone"] if c in dv.columns]
+                        cols_show = [c for c in ["Lot","Gamme","Format","Unites_Vendues","CA_Zone"] if c in dv.columns]
                         st.dataframe(dv[dv["Zone"]==zone_n][cols_show],
                                      use_container_width=True, hide_index=True,
                                      column_config={"Unites_Vendues": st.column_config.NumberColumn("Vendues"),
@@ -1986,6 +2304,11 @@ def page_depots():
 
 # ─── Main ──────────────────────────────────────────────────────
 def main():
+    # ── Vérification de l'authentification ──────────────────────
+    if not is_authenticated():
+        page_login()
+        return
+
     page = sidebar_nav()
 
     if page == "dashboard":

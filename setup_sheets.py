@@ -81,6 +81,9 @@ SHEETS = {
         "Date", "Gamme", "Format",
         "Qte_Imprimee", "Qte_Utilisee", "Stock_Restant", "Notes",
     ],
+    "Utilisateurs": [
+        "ID", "Nom", "Email", "Téléphone", "Mot_de_passe", "Rôle", "Dépôt", "Actif", "Notes",
+    ],
     "Production": [
         "Lot", "Gamme", "Date",
         "Cafe_Brut_kg", "Prix_Cafe_Brut", "Cout_Cafe_Brut",
