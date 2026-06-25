@@ -312,7 +312,7 @@ def next_id(df: pd.DataFrame, type_demande: str = "Commande confirmée") -> str:
 # ─── Authentification ──────────────────────────────────────────
 
 # Pages autorisées par rôle
-_PAGES_ADMIN = ["dashboard","new_order","orders","stock","depots","production","sachets","livreurs"]
+_PAGES_ADMIN = ["dashboard","new_order","orders","stock","depots","production","sachets","livreurs","users"]
 _PAGES_DAKAR = ["dashboard","new_order","orders","stock","depots","production","sachets","livreurs"]
 _PAGES_DEPOT = ["new_order","orders","depots"]
 
@@ -435,6 +435,7 @@ PAGES = {
     "🏭 Production":        "production",
     "🎨 Sachets & Affiches": "sachets",
     "🚚 Livraisons":        "livreurs",
+    "👥 Utilisateurs":      "users",
 }
 
 def sidebar_nav() -> str:
@@ -2302,6 +2303,160 @@ def page_depots():
                     st.error("Le nom est obligatoire.")
 
 
+# ─── Page : Gestion des utilisateurs (Admin) ───────────────────
+def page_users():
+    st.title("👥 Gestion des utilisateurs")
+
+    if current_user()["role"] != "Admin":
+        st.error("🔒 Accès réservé aux administrateurs.")
+        return
+
+    df_u = load("Utilisateurs")
+
+    # ── Liste des utilisateurs ──────────────────────────────────
+    st.subheader("Utilisateurs enregistrés")
+
+    if df_u.empty:
+        st.info("Aucun utilisateur. Crée le premier compte ci-dessous.")
+    else:
+        COLS_U = [c for c in ["ID","Nom","Email","Téléphone","Rôle","Dépôt","Actif","Notes"] if c in df_u.columns]
+        st.dataframe(
+            df_u[COLS_U],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Actif": st.column_config.TextColumn("Actif (1=oui / 0=non)"),
+                "Rôle":  st.column_config.TextColumn("Rôle"),
+            }
+        )
+
+    st.markdown("---")
+
+    # ── Ajouter un utilisateur ──────────────────────────────────
+    st.subheader("➕ Ajouter un utilisateur")
+
+    a1, a2 = st.columns(2)
+    with a1:
+        u_nom   = st.text_input("Nom *",    placeholder="Khadija Fall", key="u_nom")
+        u_email = st.text_input("Email *",  placeholder="khadija@email.com", key="u_email")
+        u_tel   = st.text_input("Téléphone", placeholder="77 000 00 00", key="u_tel")
+    with a2:
+        u_role  = st.selectbox("Rôle *",   ["Admin","Dakar","Touba","France","Partenaire"], key="u_role")
+        u_depot = st.selectbox("Dépôt",    ["", "Dakar", "Touba", "France"],
+                               help="Laisser vide pour Admin", key="u_depot")
+        u_notes = st.text_input("Notes",   placeholder="Dépôt partenaire Mbacké…", key="u_notes")
+
+    u_pwd1 = st.text_input("Mot de passe *",        type="password", key="u_pwd1")
+    u_pwd2 = st.text_input("Confirmer le mot de passe *", type="password", key="u_pwd2")
+
+    if st.button("✅ Créer l'utilisateur", use_container_width=True, type="primary"):
+        if not u_nom.strip() or not u_email.strip():
+            st.error("Nom et email sont obligatoires.")
+        elif not u_pwd1:
+            st.error("Le mot de passe est obligatoire.")
+        elif u_pwd1 != u_pwd2:
+            st.error("Les mots de passe ne correspondent pas.")
+        else:
+            # Vérifier doublon email
+            df_check = load("Utilisateurs")
+            existing = df_check["Email"].astype(str).str.lower().tolist() if not df_check.empty else []
+            if u_email.strip().lower() in existing:
+                st.error(f"Un compte avec l'email {u_email} existe déjà.")
+            else:
+                # Générer ID
+                if not df_check.empty and "ID" in df_check.columns:
+                    nums = []
+                    for v in df_check["ID"].dropna().astype(str):
+                        if v.startswith("USR-"):
+                            try: nums.append(int(v.split("-")[1]))
+                            except: pass
+                    new_uid = f"USR-{(max(nums)+1 if nums else 1):03d}"
+                else:
+                    new_uid = "USR-001"
+
+                append_dict("Utilisateurs", {
+                    "ID":           new_uid,
+                    "Nom":          u_nom.strip(),
+                    "Email":        u_email.strip(),
+                    "Téléphone":    u_tel.strip(),
+                    "Mot_de_passe": _hash_pwd(u_pwd1),
+                    "Rôle":         u_role,
+                    "Dépôt":        u_depot,
+                    "Actif":        "1",
+                    "Notes":        u_notes.strip(),
+                })
+                st.success(f"✅ Utilisateur **{u_nom}** créé ({u_role}{' · ' + u_depot if u_depot else ''}).")
+                st.rerun()
+
+    st.markdown("---")
+
+    # ── Modifier / désactiver un utilisateur ───────────────────
+    st.subheader("✏️ Modifier un utilisateur")
+
+    if df_u.empty:
+        st.info("Aucun utilisateur à modifier.")
+        return
+
+    options_u = df_u["Email"].dropna().astype(str).tolist()
+    sel_email = st.selectbox("Choisir un utilisateur", options_u, key="sel_user_edit")
+    row_u     = df_u[df_u["Email"].astype(str) == sel_email]
+    if row_u.empty:
+        return
+    row_u = row_u.iloc[0]
+
+    m1, m2 = st.columns(2)
+    with m1:
+        m_nom   = st.text_input("Nom",       value=str(row_u.get("Nom","")),   key="m_nom")
+        m_tel   = st.text_input("Téléphone", value=str(row_u.get("Téléphone","")), key="m_tel")
+        m_notes = st.text_input("Notes",     value=str(row_u.get("Notes","")), key="m_notes")
+    with m2:
+        roles_list  = ["Admin","Dakar","Touba","France","Partenaire"]
+        cur_role    = str(row_u.get("Rôle","Partenaire"))
+        m_role  = st.selectbox("Rôle",  roles_list,
+                               index=roles_list.index(cur_role) if cur_role in roles_list else 4,
+                               key="m_role")
+        depots_list = ["", "Dakar", "Touba", "France"]
+        cur_depot   = str(row_u.get("Dépôt",""))
+        m_depot = st.selectbox("Dépôt", depots_list,
+                               index=depots_list.index(cur_depot) if cur_depot in depots_list else 0,
+                               key="m_depot")
+        cur_actif = str(row_u.get("Actif","1"))
+        m_actif = st.selectbox("Statut", ["1 — Actif","0 — Désactivé"],
+                               index=0 if cur_actif == "1" else 1,
+                               key="m_actif")
+
+    m_pwd_new = st.text_input("Nouveau mot de passe (laisser vide = inchangé)", type="password", key="m_pwd")
+
+    if st.button("💾 Sauvegarder les modifications", use_container_width=True, type="primary", key="save_user"):
+        df_full_u = load("Utilisateurs")
+        ws_u      = _ws("Utilisateurs")
+        cols_u    = list(df_full_u.columns)
+        all_idx   = df_full_u.index[df_full_u["Email"].astype(str) == sel_email].tolist()
+
+        if not all_idx:
+            st.error("Utilisateur introuvable.")
+        else:
+            ridx      = all_idx[0]
+            sheet_row = ridx + 2
+
+            def _set(col, val):
+                if col in cols_u:
+                    ws_u.update_cell(sheet_row, cols_u.index(col) + 1, val)
+
+            _set("Nom",       m_nom.strip())
+            _set("Téléphone", m_tel.strip())
+            _set("Rôle",      m_role)
+            _set("Dépôt",     m_depot)
+            _set("Actif",     m_actif[0])  # "1" ou "0"
+            _set("Notes",     m_notes.strip())
+            if m_pwd_new.strip():
+                _set("Mot_de_passe", _hash_pwd(m_pwd_new.strip()))
+
+            bust()
+            st.success(f"✅ Utilisateur {sel_email} mis à jour.")
+            st.rerun()
+
+
 # ─── Main ──────────────────────────────────────────────────────
 def main():
     # ── Vérification de l'authentification ──────────────────────
@@ -2327,6 +2482,8 @@ def main():
         page_sachets()
     elif page == "livreurs":
         page_livreurs()
+    elif page == "users":
+        page_users()
 
 if __name__ == "__main__":
     main()
