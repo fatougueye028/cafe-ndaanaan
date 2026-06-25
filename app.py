@@ -160,8 +160,8 @@ PRIX_FCFA = {
     ("Signature","250g"): 1500, ("Signature","500g"): 3000, ("Signature","1kg"): 6000,
     ("Original", "250g"): 1500, ("Original", "500g"): 3000, ("Original", "1kg"): 6000,
     ("Prestige", "250g"): 1500, ("Prestige", "500g"): 3000, ("Prestige", "1kg"): 6000,
-    ("Épicé",    "250g"): 2000, ("Épicé",    "500g"): 3000, ("Épicé",    "1kg"): 6000,
-    ("Ñooket",   "250g"): 2000, ("Ñooket",   "500g"): 3000, ("Ñooket",   "1kg"): 6000,
+    ("Épicé",    "250g"): 2000, ("Épicé",    "500g"): 4000, ("Épicé",    "1kg"): 8000,
+    ("Ñooket",   "250g"): 2000, ("Ñooket",   "500g"): 4000, ("Ñooket",   "1kg"): 8000,
 }
 PRIX_EUR = {
     ("Signature","250g"): 6.50,  ("Signature","500g"): 10.90, ("Signature","1kg"): 20.00,
@@ -487,87 +487,84 @@ def page_new_order():
 
     # Initialiser la liste de produits en session
     if "produits" not in st.session_state:
-        st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0}]
+        st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "offert": False}]
 
-    # ── Infos client ──
-    with st.form("form_cmd", clear_on_submit=False):
-        st.subheader("Type de demande")
-        t1, t2 = st.columns(2)
-        with t1:
-            type_dem = st.selectbox("Type *", TYPES_DEMANDE, index=2)
-        with t2:
-            date_prevue = st.selectbox("Date prévue", DATES_PREVUES, index=6)
+    # ── 1. Type de demande ──────────────────────────────────────
+    st.subheader("Type de demande")
+    t1, t2 = st.columns(2)
+    with t1:
+        type_dem = st.selectbox("Type *", TYPES_DEMANDE, index=2, key="nd_type_dem")
+    with t2:
+        date_prevue = st.selectbox("Date prévue", DATES_PREVUES, index=6, key="nd_date_prevue")
 
-        st.subheader("Client")
-        c1, c2 = st.columns(2)
-        with c1:
-            client       = st.text_input("Nom *", placeholder="Aminata Diallo")
-            tel          = st.text_input("Téléphone", placeholder="77 123 45 67")
-            source       = st.selectbox("Source", SOURCES)
-        with c2:
-            localisation = st.text_input("Localisation client *", placeholder="Rufisque, Parcelles, Foire, Touba, Paris…")
-            depot_cmd    = st.selectbox("Dépôt source *", DEPOTS_CMD,
-                help="De quel dépôt est prélevé ce stock ?")
-            comm         = st.text_area("Commentaire", height=55, placeholder="Notes internes…")
+    # ── 2. Infos client ─────────────────────────────────────────
+    st.subheader("Client")
+    c1, c2 = st.columns(2)
+    with c1:
+        client       = st.text_input("Nom *", placeholder="Aminata Diallo", key="nd_client")
+        tel          = st.text_input("Téléphone", placeholder="77 123 45 67", key="nd_tel")
+        source       = st.selectbox("Source", SOURCES, key="nd_source")
+    with c2:
+        localisation = st.text_input("Localisation client *", placeholder="Rufisque, Parcelles, Foire, Touba, Paris…", key="nd_loc")
+        depot_cmd    = st.selectbox("Dépôt source *", DEPOTS_CMD,
+            help="De quel dépôt est prélevé ce stock ?", key="nd_depot")
+        comm         = st.text_area("Commentaire", height=55, placeholder="Notes internes…", key="nd_comm")
 
-        st.subheader("Statut")
-        s1, s2, s3, s4 = st.columns(4)
-        with s1:
-            statut_liv_form = st.selectbox("Livraison", STATUTS_LIV,
-                index=0,
-                help="'Livrée' pour un achat immédiat en boutique")
-        with s2:
-            statut_pay_form = st.selectbox("Paiement", STATUTS_PAY,
-                index=0,
-                help="'Payé' si le client a déjà réglé")
-        with s3:
-            lot_prevu = st.text_input("Lot", placeholder="Lot 4, Lot Magal…")
-        with s4:
-            st.caption("")  # espace réservé
+    # ── 3. Statut ───────────────────────────────────────────────
+    st.subheader("Statut")
+    s1, s2, s3, s4 = st.columns(4)
+    with s1:
+        statut_liv_form = st.selectbox("Livraison", STATUTS_LIV, index=0,
+            help="'Livrée' pour un achat immédiat en boutique", key="nd_statut_liv")
+    with s2:
+        statut_pay_form = st.selectbox("Paiement", STATUTS_PAY, index=0,
+            help="'Payé' si le client a déjà réglé", key="nd_statut_pay")
+    with s3:
+        lot_prevu = st.text_input("Lot", placeholder="Lot 4, Lot Magal…", key="nd_lot")
+    with s4:
+        st.caption("")
 
-        # Raccourci : Achat immédiat
-        achat_immediat = (statut_liv_form == "Livrée" and statut_pay_form == "Payé")
-        if achat_immediat:
-            st.success("🏪 **Achat immédiat** — sera enregistrée comme Livrée + Payée + Clôturée")
+    achat_immediat = (statut_liv_form == "Livrée" and statut_pay_form == "Payé")
+    if achat_immediat:
+        st.success("🏪 **Achat immédiat** — sera enregistrée comme Livrée + Payée + Clôturée")
 
-        # ── Produits ──
-        st.subheader("Produits")
-        devise = "EUR" if depot_cmd == "France" else "FCFA"
+    devise = "EUR" if depot_cmd == "France" else "FCFA"
 
-        for i, prod in enumerate(st.session_state.produits):
-            p1, p2, p3, p4, p5 = st.columns([2, 1.5, 1, 2, 1.5])
-            with p1:
-                g = st.selectbox("Gamme", GAMMES,
-                    index=GAMMES.index(prod["gamme"]) if prod["gamme"] in GAMMES else 0,
-                    key=f"gamme_{i}")
-            with p2:
-                f = st.selectbox("Format", FORMATS,
-                    index=FORMATS.index(prod["fmt"]) if prod["fmt"] in FORMATS else 1,
-                    key=f"fmt_{i}")
-            with p3:
-                q = st.number_input("Qté", min_value=1, value=prod["qty"], key=f"qty_{i}")
-            with p4:
-                prix_d = PRIX_EUR.get((g, f), 0) if devise == "EUR" else PRIX_FCFA.get((g, f), 0)
-                p = st.number_input(f"Prix ({devise})", value=float(prix_d), min_value=0.0, step=0.5, key=f"prix_{i}")
-            with p5:
-                st.markdown("<br>", unsafe_allow_html=True)
-                offert_i = st.checkbox("🎁 Offre", value=prod.get("offert", False), key=f"offert_{i}")
-            st.session_state.produits[i] = {"gamme": g, "fmt": f, "qty": q, "prix": p, "offert": offert_i}
+    # ── 4. Tableau des produits ─────────────────────────────────
+    st.subheader("Produits")
+    st.caption("Le prix unitaire et le prix final sont calculés automatiquement selon le produit et le format.")
 
-        ca_total = sum(round(p["prix"] * p["qty"], 2) for p in st.session_state.produits)
-        est_reel = type_dem in TYPES_CA_REEL
-        if est_reel:
-            st.info(f"💰 **CA total : {ca_total:,.2f} {devise}** ({len(st.session_state.produits)} produit(s))")
-        else:
-            st.warning(f"📋 **Prévisionnel : {ca_total:,.2f} {devise}**")
+    for i, prod in enumerate(st.session_state.produits):
+        p1, p2, p3, p4, p5, p6 = st.columns([2, 1.5, 1, 1.8, 1.8, 1])
+        with p1:
+            g = st.selectbox("Gamme", GAMMES,
+                index=GAMMES.index(prod["gamme"]) if prod["gamme"] in GAMMES else 0,
+                key=f"nd_gamme_{i}")
+        with p2:
+            f = st.selectbox("Format", FORMATS,
+                index=FORMATS.index(prod["fmt"]) if prod["fmt"] in FORMATS else 1,
+                key=f"nd_fmt_{i}")
+        with p3:
+            q = st.number_input("Qté", min_value=1, value=prod["qty"], key=f"nd_qty_{i}")
+        with p4:
+            prix_u = PRIX_EUR.get((g, f), 0.0) if devise == "EUR" else PRIX_FCFA.get((g, f), 0)
+            fmt_prix = f"{prix_u:.2f} €" if devise == "EUR" else f"{prix_u:,.0f} FCFA"
+            st.metric("Prix unitaire", fmt_prix)
+        with p5:
+            total_ligne = prix_u * q
+            fmt_total = f"{total_ligne:.2f} €" if devise == "EUR" else f"{total_ligne:,.0f} FCFA"
+            st.metric("Prix final", fmt_total)
+        with p6:
+            st.markdown("<br>", unsafe_allow_html=True)
+            offert_i = st.checkbox("🎁 Offre", value=prod.get("offert", False), key=f"nd_offert_{i}")
+        st.session_state.produits[i] = {"gamme": g, "fmt": f, "qty": q, "offert": offert_i}
 
-        submitted = st.form_submit_button("✅ Enregistrer la commande", use_container_width=True, type="primary")
-
-    # Boutons hors du form pour ajouter/supprimer des produits
+    # ── 5. Ajouter / Supprimer un produit ───────────────────────
+    st.markdown("---")
     col_add, col_del = st.columns(2)
     with col_add:
         if st.button("➕ Ajouter un produit", use_container_width=True):
-            st.session_state.produits.append({"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0})
+            st.session_state.produits.append({"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "offert": False})
             st.rerun()
     with col_del:
         if len(st.session_state.produits) > 1:
@@ -575,19 +572,63 @@ def page_new_order():
                 st.session_state.produits.pop()
                 st.rerun()
 
+    # ── 6. Récapitulatif ────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Récapitulatif de la commande")
+
+    recap_rows = []
+    ca_total = 0.0
+    for prod in st.session_state.produits:
+        pu = PRIX_EUR.get((prod["gamme"], prod["fmt"]), 0.0) if devise == "EUR" \
+             else PRIX_FCFA.get((prod["gamme"], prod["fmt"]), 0)
+        tl = pu * prod["qty"]
+        ca_total += tl
+        recap_rows.append({
+            "Gamme":           prod["gamme"],
+            "Format":          prod["fmt"],
+            "Quantité":        prod["qty"],
+            f"Prix unitaire ({devise})": pu,
+            f"Prix final ({devise})":    tl,
+            "Offre":           "🎁 Offre commerciale" if prod.get("offert") else "",
+        })
+
+    df_recap = pd.DataFrame(recap_rows)
+    num_fmt = "%.2f" if devise == "EUR" else "%.0f"
+    st.dataframe(
+        df_recap,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            f"Prix unitaire ({devise})": st.column_config.NumberColumn(format=num_fmt),
+            f"Prix final ({devise})":    st.column_config.NumberColumn(format=num_fmt),
+        }
+    )
+
+    est_reel = type_dem in TYPES_CA_REEL
+    if est_reel:
+        st.info(f"💰 **CA total : {ca_total:,.0f} {devise}** ({len(st.session_state.produits)} produit(s))")
+    else:
+        st.warning(f"📋 **Prévisionnel : {ca_total:,.0f} {devise}** ({len(st.session_state.produits)} produit(s))")
+
+    # ── 7. Enregistrer la commande ──────────────────────────────
+    st.markdown("---")
+    submitted = st.button("✅ Enregistrer la commande", use_container_width=True, type="primary")
+
     if submitted:
         if not client.strip():
             st.error("Le nom du client est obligatoire.")
         else:
-            new_id     = next_id(df_cmd, type_dem)
-            # Statut_Livraison : priorité au choix du formulaire
-            statut_liv = statut_liv_form
-
-            # Auto-clôturer si Livrée + Payé
+            type_dem_final = type_dem
+            statut_liv     = statut_liv_form
             if achat_immediat and type_dem not in ["Clôturée"]:
-                type_dem = "Clôturée"
+                type_dem_final = "Clôturée"
+
+            new_id = next_id(df_cmd, type_dem_final)
+
             for prod in st.session_state.produits:
-                ca_ligne = round(prod["prix"] * prod["qty"], 2)
+                pu       = PRIX_EUR.get((prod["gamme"], prod["fmt"]), 0.0) if devise == "EUR" \
+                           else PRIX_FCFA.get((prod["gamme"], prod["fmt"]), 0)
+                ca_ligne = round(pu * prod["qty"], 2)
                 append_dict("Commandes", {
                     "Date":              date.today().strftime("%d/%m/%Y"),
                     "ID":                new_id,
@@ -599,10 +640,10 @@ def page_new_order():
                     "Gamme":             prod["gamme"],
                     "Format":            prod["fmt"],
                     "Quantité":          prod["qty"],
-                    "Prix_Unitaire":     prod["prix"],
+                    "Prix_Unitaire":     pu,
                     "CA":                ca_ligne,
                     "Devise":            devise,
-                    "Type_Demande":      type_dem,
+                    "Type_Demande":      type_dem_final,
                     "Statut_Livraison":  statut_liv,
                     "Statut_Paiement":   statut_pay_form,
                     "Lot":               lot_prevu,
@@ -628,8 +669,8 @@ def page_new_order():
                     _decrement_sachet(row_data)
 
             bust()
-            st.success(f"✅ {type_dem} **{new_id}** — {len(st.session_state.produits)} produit(s) enregistré(s) !")
-            st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "prix": 3000.0}]
+            st.success(f"✅ {type_dem_final} **{new_id}** — {len(st.session_state.produits)} produit(s) enregistré(s) !")
+            st.session_state.produits = [{"gamme": GAMMES[0], "fmt": FORMATS[1], "qty": 1, "offert": False}]
             if est_reel:
                 st.balloons()
 
