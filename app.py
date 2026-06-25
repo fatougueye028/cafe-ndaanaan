@@ -362,8 +362,16 @@ def do_logout():
     st.rerun()
 
 def page_login():
-    """Page de connexion."""
-    # Centre le formulaire
+    """Page de connexion — sidebar masquée, aucune donnée visible."""
+    # Masquer complètement la sidebar pour les utilisateurs non connectés
+    st.markdown("""
+    <style>
+        section[data-testid="stSidebar"]     { display: none !important; }
+        [data-testid="collapsedControl"]      { display: none !important; }
+        .block-container { max-width: 480px; margin: auto; padding-top: 3rem; }
+    </style>
+    """, unsafe_allow_html=True)
+
     _, col, _ = st.columns([1, 2, 1])
     with col:
         logo_b64 = _load_image_b64("logo.png")
