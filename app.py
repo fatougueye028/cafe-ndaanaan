@@ -10,11 +10,16 @@ import plotly.express as px
 from datetime import date
 import hashlib
 import secrets as _secrets_mod
+import os as _os
+from PIL import Image as _PILImage
 
 # ─── Configuration page ────────────────────────────────────────
+_LOGO_PATH = _os.path.join(_os.path.dirname(__file__), "assets", "logo.png")
+_PAGE_ICON  = _PILImage.open(_LOGO_PATH) if _os.path.exists(_LOGO_PATH) else "☕"
+
 st.set_page_config(
-    page_title="☕ Kafe Ndaanaan",
-    page_icon="☕",
+    page_title="Kafe Ndaanaan",
+    page_icon=_PAGE_ICON,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -161,6 +166,51 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ─── PWA : icône écran d'accueil + couleur thème ───────────────
+def _inject_pwa_meta():
+    """Injecte les meta tags pour l'expérience PWA mobile."""
+    import base64
+    logo_b64 = ""
+    if _os.path.exists(_LOGO_PATH):
+        with open(_LOGO_PATH, "rb") as _f:
+            logo_b64 = base64.b64encode(_f.read()).decode()
+
+    icon_href = f"data:image/png;base64,{logo_b64}" if logo_b64 else ""
+
+    st.markdown(f"""
+    <script>
+    (function() {{
+        function setMeta(name, content) {{
+            var el = document.querySelector("meta[name='" + name + "']");
+            if (!el) {{ el = document.createElement('meta'); document.head.appendChild(el); }}
+            el.setAttribute('name', name);
+            el.setAttribute('content', content);
+        }}
+        function setLink(rel, href) {{
+            if (!href) return;
+            var el = document.querySelector("link[rel='" + rel + "']");
+            if (!el) {{ el = document.createElement('link'); document.head.appendChild(el); }}
+            el.setAttribute('rel', rel);
+            el.setAttribute('href', href);
+        }}
+        // Couleur de thème (barre navigateur Android + Chrome)
+        setMeta('theme-color', '#4A1E0A');
+        // iPhone : icône sur écran d'accueil
+        setLink('apple-touch-icon', '{icon_href}');
+        // iPhone : titre sous l'icône
+        setMeta('apple-mobile-web-app-title', 'Kafe Ndaanaan');
+        // iPhone : masquer la barre Safari
+        setMeta('apple-mobile-web-app-capable', 'yes');
+        setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+        // Android Chrome
+        setMeta('mobile-web-app-capable', 'yes');
+        setMeta('application-name', 'Kafe Ndaanaan');
+    }})();
+    </script>
+    """, unsafe_allow_html=True)
+
+_inject_pwa_meta()
 
 # ─── Constantes métier ─────────────────────────────────────────
 GAMMES          = ["Signature", "Original", "Prestige", "Épicé", "Ñooket"]
